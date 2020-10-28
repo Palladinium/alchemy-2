@@ -3,3 +3,4 @@ face = {1,...,6}
 
 Outcome(throw, face!)
 
+1.0 Outcome(x, y)

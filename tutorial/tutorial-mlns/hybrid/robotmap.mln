@@ -1,5 +1,5 @@
 // The segment is of the type (query) 
-SegType(seg,type)
+SegType(seg,type!)
 // The segment is part of the line (query)
 PartOf(seg, line)
    
@@ -14,11 +14,10 @@ Length(seg)
 // segment's midpoint to the nearest line (evidence)
 Depth(seg)
 
-// Segment can only be of one type
-SegType(s, Wall) v SegType(s, Door) v SegType(s, Other).
-SegType(s, t) ^ t != t' => !SegType(s, t').
+type = { Wall, Door, Other }
+line = { 1,...,5}
 
-SegType(s, +t) 
+SegType(s, +t)
 
 // Aligned wall segments tend to be part of the same wall line
 SegType(s,Wall) ^ SegType(s',Wall) ^ Aligned(s,s') ^ PartOf(s,l) => PartOf(s',l)
