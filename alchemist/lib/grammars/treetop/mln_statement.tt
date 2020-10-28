@@ -1,0 +1,139 @@
+module Alchemist
+  module Grammars
+    grammar MLNStatement
+      include Alchemist::Grammars::Logic
+      include Alchemist::Grammars::Common
+
+      ## Root
+    
+      rule statement
+        comment
+        / type_decl
+        / weighted_rule
+        / strong_rule
+        / pred_decl
+      end
+
+      ## Nonterminals
+    
+      rule type_decl
+        (type_name space* '=' space* '{' type_decl_int_values '}') {
+          def value
+            Alchemist::Logic::TypeDecl.new(type_name.text_value, type_decl_int_values.value)
+          end
+        }
+    
+        / (type_name space* '=' space* '{' space* start_val:int space* ',' space* '...' space* ',' space* end_val:int space* '}') {
+          def value
+            Alchemist::Logic::TypeDecl.new(type_name.text_value, ((start_val.value)..(end_val.value)).map { |v| Alchemist::Logic::ConstantDecl.new(v) }.to_a)
+          end
+        }
+    
+        / (type_name space* '=' space* '{' type_decl_constant_values '}') {
+          def value
+            Alchemist::Logic::TypeDecl.new(type_name.text_value, type_decl_constant_values.value)
+          end
+        }
+      end
+
+      rule type_decl_int_values
+        values:type_decl_int_value* {
+          def value
+            values.elements.map(&:value)
+          end
+        }
+      end
+
+      rule type_decl_int_value
+        space* int space* ','? space* {
+          def value
+            Alchemist::Logic::ConstantDecl.new(int.value)
+          end
+        }
+      end
+
+      rule type_decl_constant_values
+        values:type_decl_constant_value* {
+          def value
+            values.elements.map(&:value)
+          end
+        }
+      end
+
+      rule type_decl_constant_value
+        space* constant space* ','? space* {
+          def value
+            constant.value
+          end
+        }
+      end
+
+    
+      rule pred_decl
+        pred_name space* pred_decl_args_parens {
+          def value
+            Alchemist::Logic::PredicateDecl.new(pred_name.text_value, pred_decl_args_parens.value)
+          end
+        }
+      end
+
+      rule pred_decl_args_parens
+        ('(' space* args:pred_decl_arg* space* ')') {
+          def value
+            args.elements.map(&:value)
+          end
+        }
+
+        / '' {
+          def value
+            []
+          end
+        }
+      end
+
+      rule pred_decl_arg
+        arg_decl space* ','? space* {
+          def value
+            arg_decl.value
+          end
+        }
+      end
+ 
+      rule arg_decl
+        (type_name space* blocking:'!'?) {
+          def value
+            Alchemist::Logic::ArgDecl.new(type_name.text_value, !blocking.empty?)
+          end
+        }
+    
+        / ('$' space* blocking:'!'?) {
+          def value
+            Alchemist::Logic::ArgDecl.new(Alchemist::Logic::SOL_TYPE, !blocking.empty?)
+          end
+        }
+      end
+    
+      rule weighted_rule
+        (weight:float space* sentence) {
+          def value
+            Alchemist::MLN::MLNRuleDecl.new(sentence.value, weight.value)
+          end
+        }
+      end
+    
+      rule strong_rule
+        (sentence space* '.') {
+          def value
+            Alchemist::MLN::MLNRuleDecl.strong(sentence.value)
+          end
+        }
+      end
+    
+      rule arg
+        sol_atom
+        / variable
+        / constant
+      end
+    end
+  end
+end

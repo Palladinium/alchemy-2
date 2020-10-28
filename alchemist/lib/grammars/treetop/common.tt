@@ -1,0 +1,49 @@
+module Alchemist
+  module Grammars
+    grammar Common
+      ## Terminals
+
+      rule newline
+        "\n" / "\r\n"
+      end
+    
+      rule space
+        [ \t]
+      end
+    
+      rule comment
+        (('//' (!newline .)* newline)
+        / ('/*' (!'*/' (. / newline))* '*/'))
+        {
+          def value
+            nil
+          end
+        }
+      end
+    
+      rule float
+        ([0-9]+ ('.' [0-9]+)?) {
+          def value
+            Float(text_value)
+          end
+        }
+      end
+    
+      rule int
+        [0-9]+ {
+          def value
+            Integer(text_value)
+          end
+        }
+      end
+    
+      rule lowercase_name
+        [a-z] [a-zA-Z0-9_]*
+      end
+    
+      rule capitalized_name
+        [A-Z] [a-zA-Z0-9_]*
+      end
+    end
+  end
+end

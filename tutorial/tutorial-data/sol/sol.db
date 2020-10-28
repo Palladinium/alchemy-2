@@ -1,0 +1,14 @@
+// Bob doesn't smoke
+!Smokes(Bob)
+
+// Alice and Bob are friends
+Friends(Alice, Bob)
+
+// Alice thinks Bob smokes
+Thinks(Alice, $Smokes(Bob))
+//Thinks(Alice, SmokesBob)
+
+// Charlie doesn't know Alice nor Bob
+!Friends(Alice, Charlie)
+!Friends(Bob, Charlie)
+

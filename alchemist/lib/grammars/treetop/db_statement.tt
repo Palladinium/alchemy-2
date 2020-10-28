@@ -1,0 +1,29 @@
+module Alchemist
+  module Grammars
+    grammar DBStatement
+      include Alchemist::Grammars::Logic
+      include Alchemist::Grammars::Common
+
+      rule statement
+        comment
+
+        / (a:atom) {
+          def value
+            [a.value, true]
+          end
+        }
+
+        / '!' a:atom {
+          def value
+            [a.value, false]
+          end
+        }
+      end
+
+      rule arg
+        sol_atom
+        / constant
+      end
+    end
+  end
+end

@@ -1,0 +1,17 @@
+require 'polyglot'
+require 'treetop'
+
+require_relative 'alchemist'
+require_relative 'logic'
+require_relative 'mln'
+
+module Alchemist
+  module Grammars
+    GRAMMARS_DIR = File.join(ALCHEMIST_DIR, 'lib', 'grammars', 'treetop')
+
+    Treetop.load(File.join(GRAMMARS_DIR, 'common.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'logic.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'mln_statement.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'db_statement.tt'))
+  end
+end

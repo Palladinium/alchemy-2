@@ -1,0 +1,27 @@
+grammar Common
+  ## Terminals
+
+  rule empty
+  end
+
+  rule newline
+    "\n" | "\r\n"
+  end
+
+  rule space
+    [ \t]
+  end
+
+  rule comment
+    ('//' (~newline)?) { nil }
+    | ('/*' (~'*/')? '*/') { nil }
+  end
+
+  rule float
+    /[0-9]+(\.[0-9]+)?/ { Float(to_str) }
+  end
+
+  rule int
+    /[0-9]+/ { Integer(to_str) }
+  end
+end

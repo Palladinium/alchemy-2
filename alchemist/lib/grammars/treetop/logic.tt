@@ -1,0 +1,161 @@
+module Alchemist
+  module Grammars
+    grammar Logic
+      include Alchemist::Grammars::Common
+    
+      ## Root
+    
+      rule sentence
+        quantified_sentence
+      end
+
+      ## Nonterminals
+    
+      rule quantified_sentence
+        (quantifier space* quantified_sentence) {
+          def value
+            quantifier.value.new(quantified_sentence.value) 
+          end
+        }
+    
+        / iff_sentence
+      end
+    
+      rule iff_sentence
+        (implies_sentence space* '<=>' space* iff_sentence) {
+          def value
+            Alchemist::Logic::IFF.new(implies_sentence.value, iff_sentence.value) 
+          end
+        }
+    
+        / implies_sentence
+      end
+    
+      rule implies_sentence
+        (or_sentence space* '=>' space* implies_sentence) {
+          def value
+            Alchemist::Logic::Implies.new(or_sentence.value, implies_sentence.value) 
+          end
+        }
+    
+        / or_sentence
+      end
+    
+      rule or_sentence
+        (and_sentence space* 'v' space* or_sentence) {
+          def value
+            Alchemist::Logic::Or.new(and_sentence.value, or_sentence.value) 
+          end
+        }
+        / and_sentence
+      end
+    
+      rule and_sentence
+        (not_sentence space* '^' space* and_sentence) {
+          def value
+            Alchemist::Logic::And.new(not_sentence.value, and_sentence.value) 
+          end
+        }
+        / not_sentence
+      end
+    
+      rule not_sentence
+        ('(' space* sentence space* ')') {
+          def value
+            sentence.value 
+          end
+        }
+        / ('!' space* not_sentence) {
+          def value
+            Alchemist::Logic::Not.new(not_sentence.value) 
+          end
+        }
+        / atom
+      end
+    
+      rule atom
+        (pred_name space* atom_args_parens) {
+          def value
+            Alchemist::Logic::AtomDecl.new(pred_name.text_value, atom_args_parens.value)
+          end
+        }
+      end
+
+      rule atom_args_parens
+        ('(' space* args:atom_arg* space* ')') {
+          def value
+            args.elements.map(&:value)
+          end
+        }
+
+        / '' {
+          def value
+            []
+          end
+        }
+      end
+
+      rule atom_arg
+        (a:arg space* ','? space*) {
+          def value
+            a.value
+          end
+        }
+      end
+    
+      rule sol_atom
+        ('$' space* a:atom) {
+          def value
+            a.value 
+          end
+        }
+      end
+    
+      ## Terminals
+    
+      rule type_name
+        lowercase_name
+      end
+    
+      rule pred_name
+        capitalized_name
+      end
+    
+      rule variable
+        (name:lowercase_name) {
+          def value
+            Alchemist::Logic::VariableDecl.new(name.text_value) 
+          end
+        }
+      end
+    
+      rule constant
+        (val:int) {
+          def value
+            Alchemist::Logic::ConstantDecl.new(val.value) 
+          end
+        }
+    
+        / (name:capitalized_name) {
+          def value
+            Alchemist::Logic::ConstantDecl.new(name.text_value) 
+          end
+        }
+      end
+    
+      rule quantifier
+        'forall' {
+          def value
+            Alchemist::Logic::ForAll 
+          end
+        }
+    
+        / 'exists' {
+          def value
+            Alchemist::Logic::Exists 
+          end
+        }
+      end
+    end
+  end
+end
