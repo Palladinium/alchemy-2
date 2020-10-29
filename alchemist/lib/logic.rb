@@ -1,6 +1,7 @@
 module Alchemist
   module Logic
     SOL_TYPE = "$"
+    FOL_SOL_TYPE = "sol__"
 
     module Formula
       def atoms
@@ -12,11 +13,13 @@ module Alchemist
       end
 
       def ==(other)
-        to_formula == other.to_formula
+        other.respond_to?(:to_formula) &&
+          to_formula == other.to_formula
       end
 
       def eql?(other)
-        to_formula.eql?(other.to_formula)
+        other.respond_to?(:to_formula) &&
+          to_formula.eql?(other.to_formula)
       end
     end
 
@@ -35,7 +38,8 @@ module Alchemist
       attr_reader :arg
 
       def initialize(arg)
-        @arg = arg
+        @arg = arg.freeze
+        freeze
       end
 
       def args
@@ -49,6 +53,10 @@ module Alchemist
 
       def each_atom(&block)
         arg.each_atom(&block)
+      end
+
+      def transform_atoms(&block)
+        self.class.new(arg.transform_atoms(&block))
       end
 
       def compile(predicates:, **other_keys)
@@ -76,7 +84,8 @@ module Alchemist
           else
             [arg]
           end
-        }
+        }.freeze
+        freeze
       end
 
       def each_atom(&block)
@@ -89,6 +98,10 @@ module Alchemist
         end
       end
 
+      def transform_atoms(&block)
+        self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
+      end
+
       def compile(predicates:, **other_keys)
         self.class.new(*args.map { |arg| arg.compile(predicates: predicates) })
       end
@@ -99,8 +112,9 @@ module Alchemist
       attr_reader :lhs, :rhs
 
       def initialize(lhs, rhs)
-        @lhs = lhs
-        @rhs = rhs
+        @lhs = lhs.freeze
+        @rhs = rhs.freeze
+        freeze
       end
 
       def args
@@ -114,6 +128,10 @@ module Alchemist
         else
           args.flat_map { |arg| arg.each_atom }
         end
+      end
+
+      def transform_atoms(&block)
+        self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
 
       def compile(predicates:, **other_keys)
@@ -135,8 +153,17 @@ module Alchemist
           arg = arg.arg
         end
 
-        @vars = vars
-        @arg = arg
+        @vars = vars.freeze
+        @arg = arg.freeze
+        freeze
+      end
+
+      def transform_atoms(&block)
+        self.class.new(vars, arg.transform_atoms(&block))
+      end
+
+      def each_atom(&block)
+        arg.each_atom(&block)
       end
 
       def to_formula(outer_priority: nil)
@@ -221,8 +248,9 @@ module Alchemist
       attr_reader :name, :values
 
       def initialize(name, values)
-        @name = name
-        @values = values
+        @name = name.freeze
+        @values = values.freeze
+        freeze
       end
 
       def compile
@@ -278,9 +306,14 @@ module Alchemist
       private
 
       def initialize(name, values, locked:)
-        @name = name
+        @name = name.freeze
         @values = values
         @locked = locked
+
+        if locked
+          values.freeze
+          freeze
+        end
       end
     end
 
@@ -288,8 +321,9 @@ module Alchemist
       attr_reader :name, :args
 
       def initialize(name, args)
-        @name = name
-        @args = args
+        @name = name.freeze
+        @args = args.freeze
+        freeze
       end
 
       def compile(types:, **other_keys)
@@ -302,8 +336,9 @@ module Alchemist
       attr_reader :name, :args
 
       def initialize(name, args)
-        @name = name
-        @args = args
+        @name = name.freeze
+        @args = args.freeze
+        freeze
       end
 
       def to_formula(**other_keys)
@@ -330,8 +365,9 @@ module Alchemist
       end
 
       def initialize(type, blocking)
-        @type = type
-        @blocking = blocking
+        @type = type.freeze
+        @blocking = blocking.freeze
+        freeze
       end
 
       def compile(types:, **other_keys)
@@ -345,18 +381,19 @@ module Alchemist
     class Arg
       attr_reader :type
 
-      def blocking
+      def blocking?
         @blocking
       end
 
       def initialize(type, blocking)
-        @type = type
-        @blocking = blocking
+        @type = type.freeze
+        @blocking = blocking.freeze
+        freeze
       end
 
       def emit
         t = type.name
-        if blocking
+        if blocking?
           "#{t}!"
         else
           t
@@ -383,8 +420,9 @@ module Alchemist
       attr_reader :predicate, :args
 
       def initialize(predicate, args)
-        @predicate = predicate
-        @args = args
+        @predicate = predicate.freeze
+        @args = args.freeze
+        freeze
       end
 
       def compile(predicates:, **other_keys)
@@ -414,6 +452,9 @@ module Alchemist
         end
       end
 
+      def transform_atoms(&block)
+        yield self
+      end
     end
 
     class Atom
@@ -421,8 +462,9 @@ module Alchemist
       attr_reader :predicate, :args
 
       def initialize(predicate, args)
-        @predicate = predicate
-        @args = args
+        @predicate = predicate.freeze
+        @args = args.freeze
+        freeze
       end
 
       def type
@@ -456,6 +498,35 @@ module Alchemist
           [self]
         end
       end
+
+      def transform_atoms(&block)
+        yield self
+      end
+
+      def sol2fol(sol_predicate_map)
+        expanded = sol_predicate_map[predicate]
+
+        return self unless expanded
+
+        grounding = args.map { |arg|
+          if arg.is_a?(Logic::Atom)
+            arg.predicate
+          else
+            nil
+          end
+        }
+
+        Atom.new(
+          expanded[grounding],
+          args.flat_map { |arg|
+            if arg.is_a?(Atom)
+              arg.args
+            else
+              [arg]
+            end
+          }
+        )
+      end
     end
 
     class VariableDecl
@@ -464,7 +535,8 @@ module Alchemist
 
       def initialize(name)
         raise "Invalid constant name: #{name}" unless name[0] =~ /[a-z]/
-        @name = name
+        @name = name.freeze
+        freeze
       end
 
       def compile(type:, **other_keys)
@@ -481,8 +553,9 @@ module Alchemist
       attr_reader :name, :type
 
       def initialize(name, type)
-        @name = name
-        @type = type
+        @name = name.freeze
+        @type = type.freeze
+        freeze
       end
 
       def to_formula(**other_keys)
@@ -499,7 +572,8 @@ module Alchemist
           raise "Invalid constant name: '#{name}'"
         end
 
-        @name = name
+        @name = name.freeze
+        freeze
       end
 
       def compile(type:, **other_keys)
@@ -516,8 +590,9 @@ module Alchemist
       attr_reader :name, :type
 
       def initialize(name, type)
-        @name = name
-        @type = type
+        @name = name.freeze
+        @type = type.freeze
+        freeze
       end
 
       def to_formula(**other_keys)

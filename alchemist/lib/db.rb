@@ -4,15 +4,23 @@ require_relative 'logic'
 module Alchemist
   module DB
     class DB
-      attr_reader :statements
+      attr_reader :statements, :mln
       extend Util::Parsable
       include Util::ParsableTests
 
       def initialize(statements, mln:)
-        @statements = statements.transform_keys { |a| a.compile(predicates: mln.predicates) }
-        unless @statements.length == statements.length
-          raise "statements length changed from #{statements.length} to #{@statements.length} - there may be a hash collision"
+        @mln = mln
+        @statements = statements
+      end
+
+      def self.compile(statements, mln:)
+        compiled_statements = statements.transform_keys { |a| a.compile(predicates: mln.predicates) }
+
+        unless compiled_statements.length == statements.length
+          raise "statements length changed from #{statements.length} to #{compiled_statements.length} - there may be a hash collision"
         end
+
+        DB.new(compiled_statements, mln: mln)
       end
 
       def self.parse(input, mln:)
@@ -42,7 +50,7 @@ module Alchemist
           input = input[parser.index..]
         end
 
-        DB.new(statements, mln: mln)
+        DB.compile(statements, mln: mln)
       end
 
       def emit
@@ -54,6 +62,19 @@ module Alchemist
             "!#{f}"
           end
         }.join("\n")
+      end
+
+      def sol2fol
+        return self unless statements.each_key.any? { |s| s.args.any? { |a| a.type == Logic::SOL_TYPE } }
+
+        new_mln = mln.sol2fol
+        sol_predicate_map = new_mln.sol_predicate_map
+        new_statements = statements.transform_keys { |atom| atom.sol2fol(sol_predicate_map) }
+
+        DB.new(
+          new_statements,
+          mln: new_mln,
+        )
       end
 
       def eql?(other)

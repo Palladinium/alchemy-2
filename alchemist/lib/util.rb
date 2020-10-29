@@ -6,6 +6,10 @@ class Array
     reject!(&block)
     consumed
   end
+
+  def products
+    self[0].product(*self[1..])
+  end
 end
 
 module Alchemist
