@@ -24,33 +24,20 @@ module Alchemist
       end
 
       def self.parse(input, mln:)
-        statements = {}
-
-        parser = Grammars::DBStatementParser.new
-        parser.consume_all_input = false
-
-        loop do
-          input.strip!
-
-          break if input.empty?
-
-          match = parser.parse(input)
-          raise parser.failure_reason unless match
-
-          value = match.value
-
-          if value
-            atom, atom_value = value
+        self.compile(
+          self.parse_lines(
+            Grammars::DBStatementParser.new,
+            input,
+            &:value
+          ).reject(&:nil?).each_with_object({}) { |(atom, atom_value), h|
             raise "Invalid atom #{atom}" unless atom.is_a?(Logic::AtomDecl)
             raise "Invalid atom value #{atom_value}" unless atom_value.is_a?(TrueClass) || atom_value.is_a?(FalseClass)
-            raise "Multiple instances of atom '#{atom.to_formula}' in db" if statements.key?(atom)
-            statements[atom] = atom_value
-          end
+            raise "Multiple instances of atom '#{atom.to_formula}' in db" if h.key?(atom)
 
-          input = input[parser.index..]
-        end
-
-        DB.compile(statements, mln: mln)
+            h[atom] = atom_value
+          },
+          mln: mln
+        )
       end
 
       def emit
@@ -68,8 +55,7 @@ module Alchemist
         return self unless statements.each_key.any? { |s| s.args.any? { |a| a.type == Logic::SOL_TYPE } }
 
         new_mln = mln.sol2fol
-        sol_predicate_map = new_mln.sol_predicate_map
-        new_statements = statements.transform_keys { |atom| atom.sol2fol(sol_predicate_map) }
+        new_statements = statements.transform_keys { |atom| atom.sol2fol(new_mln.sol_maps) }
 
         DB.new(
           new_statements,

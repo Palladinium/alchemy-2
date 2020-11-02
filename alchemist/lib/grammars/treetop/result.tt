@@ -1,0 +1,35 @@
+module Alchemist
+  module Grammars
+    grammar Result
+      include Alchemist::Grammars::Logic
+      include Alchemist::Grammars::Common
+
+      rule result
+        (a:atom space* v:(value?)) {
+          def value
+            [
+              a.value,
+              if v.empty?
+                nil
+              else
+                v.value
+              end
+            ]
+          end
+        }
+      end
+
+      rule value
+        (!(space / newline) .)+ {
+          def value
+            text_value
+          end
+        }
+      end
+
+      rule arg
+        constant
+      end
+    end
+  end
+end

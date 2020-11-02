@@ -1,27 +1,20 @@
 person = { Alice, Bob, Charlie }
 
-//factoid = { SmokesAlice, SmokesBob, SmokesCharlie }
-
 Thinks(person, $)
-//Thinks(person, factoid)
 Smokes(person)
 Friends(person, person)
 
 // People think what they know about themselves
-//Smokes(a) => Thinks(a, $Smokes(a)).
-Smokes(Alice) => Thinks(Alice, $Smokes(Alice)).
-//Smokes(Bob) => Thinks(Bob, $Smokes(Bob)).
-
-//Smokes(Alice) => Thinks(Alice, $SmokesAlice).
+Smokes(a) => Thinks(a, $Smokes(a)).
 
 // Friendships are symmetric and antireflexive
 !Friends(a, a).
 Friends(a, b) <=> Friends(b, a).
 
 // Friends tend to influence each other's habits
-//1.0 (Friends(a, b) ^ Thinks(a, $Smokes(b))) => Smokes(a)
-(Friends(Alice, Bob) ^ Thinks(Alice,$ Smokes(Bob))) => Smokes(Alice).
-//(Friends(Alice, Bob) ^ Thinks(Alice, $SmokesBob)) => Smokes(Alice).
+1.0 (Friends(a, b) ^ Thinks(a, $Smokes(b))) => Smokes(a)
 
 // People typically don't smoke
 0.1 !Smokes(a)
+
+// TODO Test with 0-arg sol predicates

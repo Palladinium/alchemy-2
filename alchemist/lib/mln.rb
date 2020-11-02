@@ -96,11 +96,11 @@ module Alchemist
     end
 
     class MLN
-      attr_reader :rules, :types, :predicates, :sol_predicate_map
+      attr_reader :rules, :types, :predicates, :sol_maps
       extend Util::Parsable
       include Util::ParsableTests
 
-      def initialize(types:, predicates:, rules:, sol_predicate_map: {})
+      def initialize(types:, predicates:, rules:, sol_maps: nil)
         @types = types
         @types = @types.each_with_object({}) { |t, h| h[t.name] = t } unless @types.is_a?(Hash)
 
@@ -108,7 +108,11 @@ module Alchemist
 
         @predicates = @predicates.each_with_object({}) { |p, h| h[p.name] = p } unless @predicates.is_a?(Hash)
         @rules = rules
-        @sol_predicate_map = sol_predicate_map
+        @sol_maps = sol_maps
+      end
+
+      def sol_mapped?
+        !sol_maps.nil?
       end
 
       def self.compile(statements)
@@ -131,22 +135,7 @@ module Alchemist
       end
 
       def self.parse(input)
-        statements = []
-
-        parser = Grammars::MLNStatementParser.new
-        parser.consume_all_input = false
-
-        loop do
-          input.strip!
-          break if input.empty?
-          match = parser.parse(input)
-          raise parser.failure_reason unless match
-          value = match.value
-          statements << value if value
-          input = input[parser.index..]
-        end
-
-        MLN.compile(statements)
+        self.compile(self.parse_lines(Grammars::MLNStatementParser.new, input, &:value).reject(&:nil?))
       end
 
       def sol2fol
@@ -156,7 +145,6 @@ module Alchemist
 
         sol_predicates = predicates.values.select { |pred| pred.args.any? { |a| a.type == sol_type } }
         fol_predicates = predicates.values - sol_predicates
-
 
         sol_grounding_map = fol_predicates.each_with_object({}) { |pred, h|
           groundings = pred.args.map { |arg| arg.type.values.values }.products
@@ -206,11 +194,16 @@ module Alchemist
           }
         }
 
+        sol_maps = MLNSOLMaps.new(
+          predicate_map: sol_predicate_map,
+          grounding_map: sol_grounding_map,
+        )
+
         new_types = types.values - [sol_type] + [new_sol_type]
         new_predicates = fol_predicates + sol_predicate_map.values.flat_map(&:values)
         mapped_rules = rules.map { |r|
           MLNRule.new(
-            r.formula.transform_atoms { |atom| atom.sol2fol(sol_predicate_map) },
+            r.formula.transform_atoms { |atom| atom.sol2fol(sol_maps) },
             r.weight,
           )
         }
@@ -218,8 +211,7 @@ module Alchemist
         predicate_mapping_rules = sol_predicate_map.flat_map { |pred, h|
           nil_pred = h[[nil] * pred.args.length]
 
-          h
-            .reject { |pred_grounding, _| pred_grounding.all?(&:nil?) }
+          h.reject { |_, p| p == nil_pred }
             .flat_map { |pred_grounding, new_pred|
 
             pred_grounding.map { |g|
@@ -237,14 +229,14 @@ module Alchemist
                       if g
                         sol_grounding_map.dig(p, g) || raise('Inconsistent lookup tables')
                       else
-                        Logic::Variable.new("var_#{i}", arg.type)
+                        Logic::Variable.new("var__#{i}", arg.type)
                       end
                     }
                   ),
                   Logic::Atom.new(
                     new_pred,
                     grounding.zip(pred.args).each_with_index.flat_map { |(g, arg), i|
-                      g || [Logic::Variable.new("var_#{i}", arg.type)]
+                      g || [Logic::Variable.new("var__#{i}", arg.type)]
                     }
                   ),
                 )
@@ -259,10 +251,39 @@ module Alchemist
           types: new_types,
           predicates: new_predicates,
           rules: new_rules,
-          sol_predicate_map: sol_predicate_map,
+          sol_maps: sol_maps,
         )
       end
 
+      class MLNSOLMaps
+        attr_reader :predicate_map, :predicate_map_inv, :grounding_map, :grounding_map_inv
+
+        def initialize(predicate_map:, grounding_map:)
+          @predicate_map = predicate_map
+          @predicate_map_inv = predicate_map.each_with_object({}) { |(pred, groundings), h|
+            groundings.each do |grounding, new_pred|
+              h[new_pred] = [pred, grounding]
+            end
+          }
+
+          @grounding_map = grounding_map
+          @grounding_map_inv = grounding_map.each_with_object({}) { |(pred, groundings), h|
+            groundings.each do |grounding, const|
+              h[const] = [pred, grounding]
+            end
+          }
+        end
+      end
+
+      def merge(other)
+        raise 'Cannot merge sol-mapped MLNs' if sol_maps || other.sol_maps
+
+        MLN.new(
+          types: types.merge(other.types),
+          predicates: predicates.merge(other.predicates),
+          rules: rules + other.rules,
+        )
+      end
 
       def emit
         [types.values, predicates.values, rules].flatten.map(&:emit).reject(&:nil?).join("\n")
@@ -287,6 +308,91 @@ module Alchemist
         types.hash ^
           predicates.hash ^
           rules.hash
+      end
+    end
+
+    class Query
+      extend Util::Parsable
+      attr_reader :atoms
+
+      def initialize(atoms)
+        @atoms = atoms
+      end
+
+      def self.parse_opt(opt)
+        self.new(Grammars::QueryParser.new.parse(opt, root: :opt).value)
+      end
+
+      def self.parse(input)
+        self.new(self.parse_lines(Grammars::QueryParser.new, input, root: :element, &:value).reject(&:nil?))
+      end
+
+      def compile(mln)
+        Query.new(
+          atoms.map { |a|
+            if a.is_a?(Logic::AtomDecl)
+              a.compile(predicates: mln.predicates)
+            elsif a.is_a?(String)
+              pred = mln.predicates[a] || raise("Invalid predicate '#{a}'")
+              Logic::Atom.new(
+                pred,
+                pred.args.each_with_index.map { |arg, i| Logic::Variable.new("var__#{i}", arg.type) }
+              )
+            else
+              raise "Invalid query atom '#{a}'"
+            end
+          }
+        )
+      end
+
+      def sol2fol(mln)
+        Query.new(atoms.flat_map { |a| a.sol2fol_all(mln.sol_maps) })
+      end
+
+      def emit
+        atoms.map(&:to_formula).join("\n")
+      end
+
+      def emit_opt
+        atoms.map(&:to_formula).join(',')
+      end
+    end
+
+    class Result
+      extend Util::Parsable
+      attr_reader :atoms
+
+      def initialize(atoms)
+        @atoms = atoms
+      end
+
+      def self.parse(input)
+        self.new(self.parse_lines(Grammars::ResultParser.new, input, &:value).reject(&:nil?).to_h)
+      end
+
+      def compile(mln)
+        Result.new(atoms.transform_keys { |a| a.compile(predicates: mln.predicates) })
+      end
+
+      def fol2sol(mln)
+        Result.new(
+          atoms
+            .reject { |k, _| mln.sol_maps.predicate_map_inv[k]&.dig(1)&.any?(&:nil?) }
+            .transform_keys { |a| a.fol2sol(mln.sol_maps) }
+        )
+      end
+
+      def emit
+        atoms.map { |k, v|
+          f = k.to_formula
+          v_s = if v
+                  " #{v}"
+                else
+                  ''
+                end
+
+          "#{f}#{v_s}"
+        }.join("\n")
       end
     end
   end

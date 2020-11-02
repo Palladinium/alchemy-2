@@ -13,5 +13,7 @@ module Alchemist
     Treetop.load(File.join(GRAMMARS_DIR, 'logic.tt'))
     Treetop.load(File.join(GRAMMARS_DIR, 'mln_statement.tt'))
     Treetop.load(File.join(GRAMMARS_DIR, 'db_statement.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'query.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'result.tt'))
   end
 end

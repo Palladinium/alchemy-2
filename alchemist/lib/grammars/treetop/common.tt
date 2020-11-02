@@ -12,7 +12,7 @@ module Alchemist
       end
     
       rule comment
-        (('//' (!newline .)* newline)
+        (('//' (!newline .)* newline?)
         / ('/*' (!'*/' (. / newline))* '*/'))
         {
           def value

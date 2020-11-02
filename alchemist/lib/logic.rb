@@ -268,7 +268,7 @@ module Alchemist
       # Rename new to compile to make it clear it's not a trivial constructor
       def self.compile(name:, values:, **other_keys)
         Type.new(name,
-                 values.each_with_object({}) { |v, h| h[v.name] = Constant.new(v.name, self) },
+                 values,
                  locked: true)
       end
 
@@ -307,7 +307,7 @@ module Alchemist
 
       def initialize(name, values, locked:)
         @name = name.freeze
-        @values = values
+        @values = values.each_with_object({}) { |v, h| h[v.name] = Constant.new(v.name, self) }
         @locked = locked
 
         if locked
@@ -427,6 +427,11 @@ module Alchemist
 
       def compile(predicates:, **other_keys)
         new_predicate = predicates[predicate] || raise("Undefined predicate #{predicate}")
+
+        unless new_predicate.args.length == args.length
+          raise "Mismatching number of arguments for predicate #{predicate}: expected #{new_predicate.args.length}, got #{args.length}"
+        end
+
         Atom.new(
           new_predicate,
           args.zip(new_predicate.args).map { |arg, arg_decl| arg.compile(predicates: predicates, type: arg_decl.type) }
@@ -503,13 +508,12 @@ module Alchemist
         yield self
       end
 
-      def sol2fol(sol_predicate_map)
-        expanded = sol_predicate_map[predicate]
-
+      def sol2fol(sol_maps)
+        expanded = sol_maps.predicate_map[predicate]
         return self unless expanded
 
         grounding = args.map { |arg|
-          if arg.is_a?(Logic::Atom)
+          if arg.is_a?(Atom)
             arg.predicate
           else
             nil
@@ -523,6 +527,72 @@ module Alchemist
               arg.args
             else
               [arg]
+            end
+          }
+        )
+      end
+
+      def sol2fol_all(sol_maps)
+        expanded = sol_maps.predicate_map[predicate]
+        return [self] unless expanded
+
+        upper_grounding = args.map { |arg|
+          if arg.is_a?(Atom)
+            arg.predicate
+          else
+            nil
+          end
+        }
+
+        expanded.select { |grounding, _|
+          upper_grounding.zip(grounding).all? { |u, g| u.nil? || u == g  }
+        }.map { |grounding, fol_pred|
+          Atom.new(
+            fol_pred,
+            args.zip(grounding).flat_map { |arg, g|
+              if g
+                if arg.is_a?(Atom)
+                  arg.args
+                elsif arg.is_a?(Variable) # this grounding is tighter than self's
+                  g.args.each_with_index.map { |parg, i| Variable.new("#{arg.name}__#{i}", parg.type) }
+                else
+                  raise 'Unreachable code'
+                end
+              else
+                [arg]
+              end
+            }
+          )
+        }
+      end
+
+      def fol2sol(sol_maps)
+        original = sol_maps.predicate_map_inv[predicate]
+        return self unless original
+
+        pred, grounding = original
+
+        ns = grounding.map { |g|
+          if g
+            g&.args&.length
+          else
+            1
+          end
+        }
+
+        Atom.new(
+          pred,
+          args.each_var_slice(ns).zip(grounding).map { |args, g|
+            if g
+              Atom.new(g, args)
+            else
+              arg = args[0]
+              if arg.type.name == FOL_SOL_TYPE
+                pred, grounding = sol_maps.grounding_map_inv[arg] || raise("Couldn't map back constant #{arg} to SOL")
+                Atom.new(pred, grounding)
+              else
+                arg
+              end
             end
           }
         )
@@ -590,8 +660,12 @@ module Alchemist
       attr_reader :name, :type
 
       def initialize(name, type)
+        unless type.is_a?(Type)
+          require 'pry'; binding.pry
+        end
+
         @name = name.freeze
-        @type = type.freeze
+        @type = type # Do not freeze the type as we are being added to it
         freeze
       end
 

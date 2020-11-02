@@ -6,7 +6,6 @@ Friends(Alice, Bob)
 
 // Alice thinks Bob smokes
 Thinks(Alice, $Smokes(Bob))
-//Thinks(Alice, SmokesBob)
 
 // Charlie doesn't know Alice nor Bob
 !Friends(Alice, Charlie)

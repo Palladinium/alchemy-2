@@ -1,0 +1,42 @@
+module Alchemist
+  module Grammars
+    grammar Query
+      include Alchemist::Grammars::Logic
+      include Alchemist::Grammars::Common
+
+      rule opt
+        (e:element ',' rest:opt) {
+          def value
+            [e.value] + rest.value
+          end
+        }
+
+        / (e:element) {
+          def value
+            [e.value]
+          end
+        }
+      end
+
+      rule element
+        (p:pred_name space* !'(') {
+          def value
+            p.text_value
+          end
+        }
+
+        / (a:atom) {
+          def value
+            a.value
+          end
+        }
+      end
+
+      rule arg
+        sol_atom
+        / variable
+        / constant
+      end
+    end
+  end
+end
