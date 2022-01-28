@@ -31,7 +31,7 @@ module Alchemist
             &:value
           ).reject(&:nil?).each_with_object({}) { |(atom, atom_value), h|
             raise "Invalid atom #{atom}" unless atom.is_a?(Logic::AtomDecl)
-            raise "Invalid atom value #{atom_value}" unless atom_value.is_a?(TrueClass) || atom_value.is_a?(FalseClass)
+            raise "Invalid atom value #{atom_value}" unless [nil, true, false].include?(atom_value)
             raise "Multiple instances of atom '#{atom.to_formula}' in db" if h.key?(atom)
 
             h[atom] = atom_value
@@ -43,10 +43,16 @@ module Alchemist
       def emit
         statements.map { |atom, atom_value|
           f = atom.to_formula
-          if atom_value
+
+          case atom_value
+          when true
             f
-          else
+          when false
             "!#{f}"
+          when nil
+            "?#{f}"
+          else
+            raise "Invalid atom value #{atom_value}"
           end
         }.join("\n")
       end

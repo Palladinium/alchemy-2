@@ -346,14 +346,8 @@ module Alchemist
       end
 
       def emit
-        args_s = if args.empty?
-                   ''
-                 else
-                   in_args_s = args.map(&:emit).join(',')
-                   "(#{in_args_s})"
-                 end
-
-        "#{name}#{args_s}"
+        args_s = args.map(&:emit).join(',')
+        "#{name}(#{args_s})"
       end
     end
 
@@ -439,14 +433,8 @@ module Alchemist
       end
 
       def to_formula(**other_keys)
-        args_s = if args.empty?
-                   ''
-                 else
-                   in_args_s = args.map { |a| a.to_formula(**other_keys) }.join(',')
-                   "(#{in_args_s})"
-                 end
-
-        "#{predicate}#{args_s}"
+        args_s = args.map { |a| a.to_formula(**other_keys) }.join(',')
+        "#{predicate}(#{args_s})"
       end
 
       def each_atom(&block)
@@ -479,21 +467,16 @@ module Alchemist
       def to_formula(**other_keys)
         predicate_s = predicate.to_formula(**other_keys)
 
-        args_s = if args.empty?
-                   ''
-                 else
-                   in_args_s = args.map { |a|
-                     f = a.to_formula(**other_keys)
-                     if a.is_a?(Atom)
-                       "$#{f}"
-                     else
-                       f
-                     end
-                   }.join(',')
-                   "(#{in_args_s})"
-                 end
+        args_s = args.map { |a|
+          f = a.to_formula(**other_keys)
+          if a.is_a?(Atom)
+            "$#{f}"
+          else
+            f
+          end
+        }.join(',')
 
-        "#{predicate_s}#{args_s}"
+        "#{predicate_s}(#{args_s})"
       end
 
       def each_atom(&block)

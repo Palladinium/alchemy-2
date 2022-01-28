@@ -13,9 +13,15 @@ module Alchemist
           end
         }
 
-        / '!' a:atom {
+        / '!' space* a:atom {
           def value
             [a.value, false]
+          end
+        }
+
+        / '?' space* a:atom {
+          def value
+            [a.value, nil]
           end
         }
       end

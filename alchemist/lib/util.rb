@@ -8,7 +8,11 @@ class Array
   end
 
   def products
-    self[0].product(*self[1..])
+    if empty?
+      [[]]
+    else
+      self[0].product(*self[1..])
+    end
   end
 end
 
