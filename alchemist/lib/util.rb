@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pry'
 
 class Array
@@ -17,21 +19,21 @@ class Array
 end
 
 module Enumerable
-  def each_var_slice(ns)
+  def each_var_slice(sizes)
     it = self
 
     if block_given?
-      ns.each do |n|
+      sizes.each do |n|
         slice = it.take(n)
         it = it.drop(n)
         yield slice
       end
     else
-      ns.map { |n|
+      sizes.map do |n|
         slice = it.take(n)
         it = it.drop(n)
         slice
-      }
+      end
     end
   end
 end
@@ -40,7 +42,7 @@ module Alchemist
   module Util
     module Parsable
       def parse_file(filename, *args, **kwargs)
-        self.parse(File.read(filename), *args, **kwargs)
+        parse(File.read(filename), *args, **kwargs)
       end
 
       def parse_lines(parser, input, **opts)
@@ -49,6 +51,7 @@ module Alchemist
         loop do
           input.strip!
           break if input.empty?
+
           match = parser.parse(input, consume_all_input: false, **opts)
           raise parser.failure_reason unless match
 
@@ -65,18 +68,10 @@ module Alchemist
     module ParsableTests
       def test_equivalence(*args, **kwargs)
         out = emit
-        obj_2 = self.class.parse(out, *args, **kwargs)
-        out_2 = obj_2.emit
+        obj2 = self.class.parse(out, *args, **kwargs)
+        out2 = obj_2.emit
 
-        unless self == obj_2
-          raise 'Parsing equivalence error'
-          binding.pry
-        end
-
-        unless out == out_2
-          raise 'Parsing equivalence error'
-          binding.pry
-        end
+        raise 'Parsing equivalence error' unless self == obj2 && out == out2
       end
     end
   end

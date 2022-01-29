@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 module Alchemist
   module Logic
-    SOL_TYPE = "$"
-    FOL_SOL_TYPE = "sol__"
+    SOL_TYPE = '$'
+    FOL_SOL_TYPE = 'sol__'
 
     module Formula
       def atoms
@@ -24,17 +26,18 @@ module Alchemist
     end
 
     module Priority
-      def wrap_priority(s, outer_priority)
+      def wrap_priority(str, outer_priority)
         if outer_priority && priority < outer_priority
-          "(#{s})"
+          "(#{str})"
         else
-          s
+          str
         end
       end
     end
 
     class UnaryOperator
-      include Priority, Formula
+      include Formula
+      include Priority
       attr_reader :arg
 
       def initialize(arg)
@@ -59,13 +62,14 @@ module Alchemist
         self.class.new(arg.transform_atoms(&block))
       end
 
-      def compile(predicates:, **other_keys)
+      def compile(predicates:, **_other_keys)
         self.class.new(arg.compile(predicates: predicates))
       end
     end
 
     module InfixOperator
-      include Priority, Formula
+      include Formula
+      include Priority
 
       def to_formula(outer_priority: nil)
         args_s = args.map { |arg| arg.to_formula(outer_priority: priority) }.join(" #{op} ")
@@ -78,13 +82,13 @@ module Alchemist
       attr_reader :args
 
       def initialize(*args)
-        @args = args.flat_map { |arg|
+        @args = args.flat_map do |arg|
           if arg.is_a?(self.class)
             arg.args
           else
             [arg]
           end
-        }.freeze
+        end.freeze
         freeze
       end
 
@@ -94,7 +98,7 @@ module Alchemist
             arg.each_atom(&block)
           end
         else
-          args.flat_map { |arg| arg.each_atom }
+          args.flat_map(&:each_atom)
         end
       end
 
@@ -102,7 +106,7 @@ module Alchemist
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
 
-      def compile(predicates:, **other_keys)
+      def compile(predicates:, **_other_keys)
         self.class.new(*args.map { |arg| arg.compile(predicates: predicates) })
       end
     end
@@ -126,7 +130,7 @@ module Alchemist
           lhs.each_atom(&block)
           rhs.each_atom(&block)
         else
-          args.flat_map { |arg| arg.each_atom }
+          args.flat_map(&:each_atom)
         end
       end
 
@@ -134,21 +138,20 @@ module Alchemist
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
 
-      def compile(predicates:, **other_keys)
+      def compile(predicates:, **_other_keys)
         self.class.new(*args.map { |arg| arg.compile(predicates: predicates) })
       end
     end
 
     class QualifiedOperator
-      include Priority, Formula
+      include Formula
+      include Priority
       attr_reader :vars, :arg
 
       def initialize(vars, arg)
-        if vars.empty?
-          raise ArgumentError, "Invalid qualified operator #{op} with 0 vars"
-        end
+        raise ArgumentError, "Invalid qualified operator #{op} with 0 vars" if vars.empty?
 
-        while arg.class == self.class
+        while arg.instance_of?(self.class)
           vars += arg.vars
           arg = arg.arg
         end
@@ -266,7 +269,7 @@ module Alchemist
       end
 
       # Rename new to compile to make it clear it's not a trivial constructor
-      def self.compile(name:, values:, **other_keys)
+      def self.compile(name:, values:, **_other_keys)
         Type.new(name,
                  values,
                  locked: true)
@@ -274,16 +277,15 @@ module Alchemist
 
       def resolve(value_name)
         raise "Undefined constant '#{value_name}' for declared type '#{name}'" if !values[value_name] && locked?
+
         values[value_name] ||= Constant.new(value_name, self)
       end
 
       def emit
-        if locked?
-          values_s = values.values.map(&:to_formula).join(',')
-          "#{name} = { #{values_s} }"
-        else
-          nil
-        end
+        return unless locked?
+
+        values_s = values.values.map(&:to_formula).join(',')
+        "#{name} = { #{values_s} }"
       end
 
       def eql?(other)
@@ -310,10 +312,10 @@ module Alchemist
         @values = values.each_with_object({}) { |v, h| h[v.name] = Constant.new(v.name, self) }
         @locked = locked
 
-        if locked
-          values.freeze
-          freeze
-        end
+        return unless locked
+
+        values.freeze
+        freeze
       end
     end
 
@@ -326,7 +328,7 @@ module Alchemist
         freeze
       end
 
-      def compile(types:, **other_keys)
+      def compile(types:, **_other_keys)
         Predicate.new(name, args.map { |arg| arg.compile(types: types) })
       end
     end
@@ -341,7 +343,7 @@ module Alchemist
         freeze
       end
 
-      def to_formula(**other_keys)
+      def to_formula(**_other_keys)
         name
       end
 
@@ -364,10 +366,10 @@ module Alchemist
         freeze
       end
 
-      def compile(types:, **other_keys)
+      def compile(types:, **_other_keys)
         Arg.new(
           types[type] ||= Type.new(type, {}, locked: false),
-          blocking?,
+          blocking?
         )
       end
     end
@@ -419,11 +421,14 @@ module Alchemist
         freeze
       end
 
-      def compile(predicates:, **other_keys)
+      def compile(predicates:, **_other_keys)
         new_predicate = predicates[predicate] || raise("Undefined predicate #{predicate}")
 
         unless new_predicate.args.length == args.length
-          raise "Mismatching number of arguments for predicate #{predicate}: expected #{new_predicate.args.length}, got #{args.length}"
+          raise <<-ERR
+            Mismatching number of arguments for predicate #{predicate}:
+            expected #{new_predicate.args.length}, got #{args.length}
+          ERR
         end
 
         Atom.new(
@@ -445,7 +450,7 @@ module Alchemist
         end
       end
 
-      def transform_atoms(&block)
+      def transform_atoms
         yield self
       end
     end
@@ -467,14 +472,14 @@ module Alchemist
       def to_formula(**other_keys)
         predicate_s = predicate.to_formula(**other_keys)
 
-        args_s = args.map { |a|
+        args_s = args.map do |a|
           f = a.to_formula(**other_keys)
           if a.is_a?(Atom)
             "$#{f}"
           else
             f
           end
-        }.join(',')
+        end.join(',')
 
         "#{predicate_s}(#{args_s})"
       end
@@ -487,7 +492,7 @@ module Alchemist
         end
       end
 
-      def transform_atoms(&block)
+      def transform_atoms
         yield self
       end
 
@@ -495,23 +500,19 @@ module Alchemist
         expanded = sol_maps.predicate_map[predicate]
         return self unless expanded
 
-        grounding = args.map { |arg|
-          if arg.is_a?(Atom)
-            arg.predicate
-          else
-            nil
-          end
-        }
+        grounding = args.map do |arg|
+          arg.predicate if arg.is_a?(Atom)
+        end
 
         Atom.new(
           expanded[grounding],
-          args.flat_map { |arg|
+          args.flat_map do |arg|
             if arg.is_a?(Atom)
               arg.args
             else
               [arg]
             end
-          }
+          end
         )
       end
 
@@ -519,24 +520,21 @@ module Alchemist
         expanded = sol_maps.predicate_map[predicate]
         return [self] unless expanded
 
-        upper_grounding = args.map { |arg|
-          if arg.is_a?(Atom)
-            arg.predicate
-          else
-            nil
-          end
-        }
+        upper_grounding = args.map do |arg|
+          arg.predicate if arg.is_a?(Atom)
+        end
 
-        expanded.select { |grounding, _|
-          upper_grounding.zip(grounding).all? { |u, g| u.nil? || u == g  }
-        }.map { |grounding, fol_pred|
+        expanded
+          .select { |grounding, _| upper_grounding.zip(grounding).all? { |u, g| u.nil? || u == g } }
+          .map do |grounding, fol_pred|
           Atom.new(
             fol_pred,
-            args.zip(grounding).flat_map { |arg, g|
+            args.zip(grounding).flat_map do |arg, g|
               if g
-                if arg.is_a?(Atom)
+                case arg
+                when Atom
                   arg.args
-                elsif arg.is_a?(Variable) # this grounding is tighter than self's
+                when Variable # this grounding is tighter than self's
                   g.args.each_with_index.map { |parg, i| Variable.new("#{arg.name}__#{i}", parg.type) }
                 else
                   raise 'Unreachable code'
@@ -544,9 +542,9 @@ module Alchemist
               else
                 [arg]
               end
-            }
+            end
           )
-        }
+        end
       end
 
       def fol2sol(sol_maps)
@@ -555,17 +553,17 @@ module Alchemist
 
         pred, grounding = original
 
-        ns = grounding.map { |g|
+        ns = grounding.map do |g|
           if g
             g&.args&.length
           else
             1
           end
-        }
+        end
 
         Atom.new(
           pred,
-          args.each_var_slice(ns).zip(grounding).map { |args, g|
+          args.each_var_slice(ns).zip(grounding).map do |args, g|
             if g
               Atom.new(g, args)
             else
@@ -577,7 +575,7 @@ module Alchemist
                 arg
               end
             end
-          }
+          end
         )
       end
     end
@@ -588,15 +586,16 @@ module Alchemist
 
       def initialize(name)
         raise "Invalid constant name: #{name}" unless name[0] =~ /[a-z]/
+
         @name = name.freeze
         freeze
       end
 
-      def compile(type:, **other_keys)
+      def compile(type:, **_other_keys)
         Variable.new(name, type)
       end
 
-      def to_formula(**other_keys)
+      def to_formula(**_other_keys)
         name
       end
     end
@@ -611,7 +610,7 @@ module Alchemist
         freeze
       end
 
-      def to_formula(**other_keys)
+      def to_formula(**_other_keys)
         name
       end
     end
@@ -629,11 +628,11 @@ module Alchemist
         freeze
       end
 
-      def compile(type:, **other_keys)
+      def compile(type:, **_other_keys)
         type.resolve(name)
       end
 
-      def to_formula(**other_keys)
+      def to_formula(**_other_keys)
         name
       end
     end
@@ -643,16 +642,14 @@ module Alchemist
       attr_reader :name, :type
 
       def initialize(name, type)
-        unless type.is_a?(Type)
-          require 'pry'; binding.pry
-        end
+        raise ArgumentError, "type is not a Type: #{type}" unless type.is_a?(Type)
 
         @name = name.freeze
         @type = type # Do not freeze the type as we are being added to it
         freeze
       end
 
-      def to_formula(**other_keys)
+      def to_formula(**_other_keys)
         name
       end
     end
