@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Alchemist
+module Alchemizer
   module Logic
     SOL_TYPE = '$'
     FOL_SOL_TYPE = 'sol__'

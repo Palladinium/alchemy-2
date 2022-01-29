@@ -3,7 +3,7 @@
 require_relative 'util'
 require_relative 'logic'
 
-module Alchemist
+module Alchemizer
   module DB
     class DB
       attr_reader :statements, :mln

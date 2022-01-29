@@ -38,7 +38,7 @@ module Enumerable
   end
 end
 
-module Alchemist
+module Alchemizer
   module Util
     module Parsable
       def parse_file(filename, *args, **kwargs)

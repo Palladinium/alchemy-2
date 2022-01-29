@@ -1,8 +1,8 @@
-module Alchemist
+module Alchemizer
   module Grammars
     grammar MLNStatement
-      include Alchemist::Grammars::Logic
-      include Alchemist::Grammars::Common
+      include Alchemizer::Grammars::Logic
+      include Alchemizer::Grammars::Common
 
       ## Root
     
@@ -19,19 +19,19 @@ module Alchemist
       rule type_decl
         (type_name space* '=' space* '{' type_decl_int_values '}') {
           def value
-            Alchemist::Logic::TypeDecl.new(type_name.text_value, type_decl_int_values.value)
+            Alchemizer::Logic::TypeDecl.new(type_name.text_value, type_decl_int_values.value)
           end
         }
     
         / (type_name space* '=' space* '{' space* start_val:int space* ',' space* '...' space* ',' space* end_val:int space* '}') {
           def value
-            Alchemist::Logic::TypeDecl.new(type_name.text_value, ((start_val.value)..(end_val.value)).map { |v| Alchemist::Logic::ConstantDecl.new(v) }.to_a)
+            Alchemizer::Logic::TypeDecl.new(type_name.text_value, ((start_val.value)..(end_val.value)).map { |v| Alchemizer::Logic::ConstantDecl.new(v) }.to_a)
           end
         }
     
         / (type_name space* '=' space* '{' type_decl_constant_values '}') {
           def value
-            Alchemist::Logic::TypeDecl.new(type_name.text_value, type_decl_constant_values.value)
+            Alchemizer::Logic::TypeDecl.new(type_name.text_value, type_decl_constant_values.value)
           end
         }
       end
@@ -47,7 +47,7 @@ module Alchemist
       rule type_decl_int_value
         space* int space* ','? space* {
           def value
-            Alchemist::Logic::ConstantDecl.new(int.value)
+            Alchemizer::Logic::ConstantDecl.new(int.value)
           end
         }
       end
@@ -72,7 +72,7 @@ module Alchemist
       rule pred_decl
         pred_name space* pred_decl_args_parens {
           def value
-            Alchemist::Logic::PredicateDecl.new(pred_name.text_value, pred_decl_args_parens.value)
+            Alchemizer::Logic::PredicateDecl.new(pred_name.text_value, pred_decl_args_parens.value)
           end
         }
       end
@@ -102,13 +102,13 @@ module Alchemist
       rule arg_decl
         (type_name space* blocking:'!'?) {
           def value
-            Alchemist::Logic::ArgDecl.new(type_name.text_value, !blocking.empty?)
+            Alchemizer::Logic::ArgDecl.new(type_name.text_value, !blocking.empty?)
           end
         }
     
         / ('$' space* blocking:'!'?) {
           def value
-            Alchemist::Logic::ArgDecl.new(Alchemist::Logic::SOL_TYPE, !blocking.empty?)
+            Alchemizer::Logic::ArgDecl.new(Alchemizer::Logic::SOL_TYPE, !blocking.empty?)
           end
         }
       end
@@ -116,7 +116,7 @@ module Alchemist
       rule weighted_rule
         (weight:float space* sentence) {
           def value
-            Alchemist::MLN::MLNRuleDecl.new(sentence.value, weight.value)
+            Alchemizer::MLN::MLNRuleDecl.new(sentence.value, weight.value)
           end
         }
       end
@@ -124,7 +124,7 @@ module Alchemist
       rule strong_rule
         (sentence space* '.') {
           def value
-            Alchemist::MLN::MLNRuleDecl.strong(sentence.value)
+            Alchemizer::MLN::MLNRuleDecl.strong(sentence.value)
           end
         }
       end

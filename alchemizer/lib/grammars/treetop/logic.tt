@@ -1,7 +1,7 @@
-module Alchemist
+module Alchemizer
   module Grammars
     grammar Logic
-      include Alchemist::Grammars::Common
+      include Alchemizer::Grammars::Common
     
       ## Root
     
@@ -24,7 +24,7 @@ module Alchemist
       rule iff_sentence
         (implies_sentence space* '<=>' space* iff_sentence) {
           def value
-            Alchemist::Logic::IFF.new(implies_sentence.value, iff_sentence.value) 
+            Alchemizer::Logic::IFF.new(implies_sentence.value, iff_sentence.value) 
           end
         }
     
@@ -34,7 +34,7 @@ module Alchemist
       rule implies_sentence
         (or_sentence space* '=>' space* implies_sentence) {
           def value
-            Alchemist::Logic::Implies.new(or_sentence.value, implies_sentence.value) 
+            Alchemizer::Logic::Implies.new(or_sentence.value, implies_sentence.value) 
           end
         }
     
@@ -44,7 +44,7 @@ module Alchemist
       rule or_sentence
         (and_sentence space* 'v' space* or_sentence) {
           def value
-            Alchemist::Logic::Or.new(and_sentence.value, or_sentence.value) 
+            Alchemizer::Logic::Or.new(and_sentence.value, or_sentence.value) 
           end
         }
         / and_sentence
@@ -53,7 +53,7 @@ module Alchemist
       rule and_sentence
         (not_sentence space* '^' space* and_sentence) {
           def value
-            Alchemist::Logic::And.new(not_sentence.value, and_sentence.value) 
+            Alchemizer::Logic::And.new(not_sentence.value, and_sentence.value) 
           end
         }
         / not_sentence
@@ -67,7 +67,7 @@ module Alchemist
         }
         / ('!' space* not_sentence) {
           def value
-            Alchemist::Logic::Not.new(not_sentence.value) 
+            Alchemizer::Logic::Not.new(not_sentence.value) 
           end
         }
         / atom
@@ -76,7 +76,7 @@ module Alchemist
       rule atom
         (pred_name space* atom_args_parens) {
           def value
-            Alchemist::Logic::AtomDecl.new(pred_name.text_value, atom_args_parens.value)
+            Alchemizer::Logic::AtomDecl.new(pred_name.text_value, atom_args_parens.value)
           end
         }
       end
@@ -124,7 +124,7 @@ module Alchemist
       rule variable
         (name:lowercase_name) {
           def value
-            Alchemist::Logic::VariableDecl.new(name.text_value) 
+            Alchemizer::Logic::VariableDecl.new(name.text_value) 
           end
         }
       end
@@ -132,13 +132,13 @@ module Alchemist
       rule constant
         (val:int) {
           def value
-            Alchemist::Logic::ConstantDecl.new(val.value) 
+            Alchemizer::Logic::ConstantDecl.new(val.value) 
           end
         }
     
         / (name:capitalized_name) {
           def value
-            Alchemist::Logic::ConstantDecl.new(name.text_value) 
+            Alchemizer::Logic::ConstantDecl.new(name.text_value) 
           end
         }
       end
@@ -146,13 +146,13 @@ module Alchemist
       rule quantifier
         'forall' {
           def value
-            Alchemist::Logic::ForAll 
+            Alchemizer::Logic::ForAll 
           end
         }
     
         / 'exists' {
           def value
-            Alchemist::Logic::Exists 
+            Alchemizer::Logic::Exists 
           end
         }
       end

@@ -1,4 +1,4 @@
-module Alchemist
+module Alchemizer
   module Grammars
     grammar Common
       ## Terminals

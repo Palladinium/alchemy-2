@@ -1,8 +1,8 @@
-module Alchemist
+module Alchemizer
   module Grammars
     grammar DBStatement
-      include Alchemist::Grammars::Logic
-      include Alchemist::Grammars::Common
+      include Alchemizer::Grammars::Logic
+      include Alchemizer::Grammars::Common
 
       rule statement
         comment

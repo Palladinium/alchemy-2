@@ -4,7 +4,7 @@ require_relative 'logic'
 require_relative 'util'
 require_relative 'grammars'
 
-module Alchemist
+module Alchemizer
   module MLN
     class MLNRule
       attr_reader :formula, :weight

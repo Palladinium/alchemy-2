@@ -1,8 +1,8 @@
-module Alchemist
+module Alchemizer
   module Grammars
     grammar Query
-      include Alchemist::Grammars::Logic
-      include Alchemist::Grammars::Common
+      include Alchemizer::Grammars::Logic
+      include Alchemizer::Grammars::Common
 
       rule opt
         (e:element ',' rest:opt) {

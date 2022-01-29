@@ -1,8 +1,16 @@
+PATH
+  remote: .
+  specs:
+    alchemizer (0.0.0)
+      polyglot
+      thor
+      treetop
+
 GEM
   remote: https://rubygems.org/
   specs:
     polyglot (0.3.5)
-    thor (1.0.1)
+    thor (1.2.1)
     treetop (1.6.11)
       polyglot (~> 0.3)
 
@@ -10,9 +18,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  polyglot
-  thor
-  treetop
+  alchemizer!
 
 RUBY VERSION
    ruby 2.7.3p183
