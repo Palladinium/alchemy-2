@@ -12,11 +12,9 @@ Gem::Specification.new do |spec|
 
   spec.metadata['allowed_push_host'] = "TODO: Set to 'http://mygemserver.com'"
 
-  spec.files = `git ls-files -z -- .`.split("\x0").reject { |f| f.match(%r{^./(test|spec|features)/}) } +
-               `git ls-files -z -- sources`.split("\x0")
-  spec.require_paths = ['lib']
+  spec.files = Dir.glob('lib/*.rb') + Dir.glob('lib/grammars/treetop/*.tt')
 
-  spec.add_runtime_dependency 'polyglot'
-  spec.add_runtime_dependency 'thor'
-  spec.add_runtime_dependency 'treetop'
+  spec.add_runtime_dependency 'polyglot', '~> 0.3.5'
+  spec.add_runtime_dependency 'thor', '~> 1.2.1'
+  spec.add_runtime_dependency 'treetop', '~> 1.6.11'
 end

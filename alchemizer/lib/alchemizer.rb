@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'citrus'
-
 module Alchemizer
   ALCHEMIZER_DIR = File.expand_path('..', File.dirname(__FILE__)).freeze
   ALCHEMY_DIR = File.expand_path('..', ALCHEMIZER_DIR).freeze
@@ -21,7 +19,7 @@ module Alchemizer
     end
   end.freeze
 
-  def infer(inputs:, evidence:, query: nil, query_file: nil, opts: [])
+  def self.infer(inputs:, evidence:, result:, query: nil, query_file: nil, opts: [])
     infer_path = File.join(ALCHEMY_DIR, 'bin', 'infer')
 
     sol_mln_paths = inputs
