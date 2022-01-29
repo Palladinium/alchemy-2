@@ -3,9 +3,11 @@
 require 'thor'
 require 'shellwords'
 
-require_relative 'alchemizer'
+require_relative 'constants'
 require_relative 'mln'
 require_relative 'db'
+require_relative 'util'
+require_relative 'commands'
 
 module Alchemizer
   class CLI < Thor
@@ -87,33 +89,6 @@ module Alchemizer
         query_file: options[:query_file] && MLN::Query.parse_file(options[:query_file]),
         opts: options[:opts]&.shellsplit
       )
-    end
-
-    no_commands do
-      def chdir_tmp
-        Dir.mktmpdir('alchemizer') do |tmpdir|
-          Dir.chdir(tmpdir) do
-            yield tmpdir
-          end
-        end
-      end
-
-      def start_line(text, indent = 0)
-        putflush("#{' ' * 2 * indent}#{text}")
-      end
-
-      def tick
-        putflush(" \u2713")
-      end
-
-      def end_line
-        puts
-      end
-
-      def putflush(text)
-        $stdout.write(text)
-        $stdout.flush
-      end
     end
   end
 end

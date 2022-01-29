@@ -100,8 +100,8 @@ module Alchemizer
     class MLN
       attr_reader :rules, :types, :predicates, :sol_maps
 
-      extend Util::Parsable
-      include Util::ParsableTests
+      extend Parsable
+      include ParsableTests
 
       def initialize(types:, predicates:, rules:, sol_maps: nil)
         @types = types
@@ -321,7 +321,7 @@ module Alchemizer
     end
 
     class Query
-      extend Util::Parsable
+      extend Parsable
       attr_reader :atoms
 
       def initialize(atoms)
@@ -369,7 +369,7 @@ module Alchemizer
     end
 
     class Result
-      extend Util::Parsable
+      extend Parsable
       attr_reader :atoms
 
       def initialize(atoms)

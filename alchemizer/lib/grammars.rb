@@ -3,7 +3,7 @@
 require 'polyglot'
 require 'treetop'
 
-require_relative 'alchemizer'
+require_relative 'constants'
 require_relative 'logic'
 require_relative 'mln'
 

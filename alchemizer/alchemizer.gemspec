@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Gem::Specification.new do |spec|
   spec.name        = 'alchemizer'
   spec.version     = '0.0.0'
@@ -11,8 +13,11 @@ Gem::Specification.new do |spec|
   raise 'RubyGems 2.0 or newer is required' unless spec.respond_to?(:metadata)
 
   spec.metadata['allowed_push_host'] = "TODO: Set to 'http://mygemserver.com'"
+  spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.files = Dir.glob('lib/*.rb') + Dir.glob('lib/grammars/treetop/*.tt')
+
+  spec.required_ruby_version = File.read(File.join(File.dirname(__FILE__), '.ruby-version'))
 
   spec.add_runtime_dependency 'polyglot', '~> 0.3.5'
   spec.add_runtime_dependency 'thor', '~> 1.2.1'

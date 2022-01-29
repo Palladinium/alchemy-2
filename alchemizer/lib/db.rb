@@ -8,8 +8,8 @@ module Alchemizer
     class DB
       attr_reader :statements, :mln
 
-      extend Util::Parsable
-      include Util::ParsableTests
+      extend Parsable
+      include ParsableTests
 
       def initialize(statements, mln:)
         @mln = mln

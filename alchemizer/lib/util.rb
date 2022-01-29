@@ -39,40 +39,63 @@ module Enumerable
 end
 
 module Alchemizer
-  module Util
-    module Parsable
-      def parse_file(filename, *args, **kwargs)
-        parse(File.read(filename), *args, **kwargs)
-      end
-
-      def parse_lines(parser, input, **opts)
-        output = []
-
-        loop do
-          input.strip!
-          break if input.empty?
-
-          match = parser.parse(input, consume_all_input: false, **opts)
-          raise parser.failure_reason unless match
-
-          out = yield match
-          output << out
-
-          input = input[parser.index..]
-        end
-
-        output
-      end
+  module Parsable
+    def parse_file(filename, *args, **kwargs)
+      parse(File.read(filename), *args, **kwargs)
     end
 
-    module ParsableTests
-      def test_equivalence(*args, **kwargs)
-        out = emit
-        obj2 = self.class.parse(out, *args, **kwargs)
-        out2 = obj_2.emit
+    def parse_lines(parser, input, **opts)
+      output = []
 
-        raise 'Parsing equivalence error' unless self == obj2 && out == out2
+      loop do
+        input.strip!
+        break if input.empty?
+
+        match = parser.parse(input, consume_all_input: false, **opts)
+        raise parser.failure_reason unless match
+
+        out = yield match
+        output << out
+
+        input = input[parser.index..]
+      end
+
+      output
+    end
+  end
+
+  module ParsableTests
+    def test_equivalence(*args, **kwargs)
+      out = emit
+      obj2 = self.class.parse(out, *args, **kwargs)
+      out2 = obj_2.emit
+
+      raise 'Parsing equivalence error' unless self == obj2 && out == out2
+    end
+  end
+
+  def self.chdir_tmp
+    Dir.mktmpdir('alchemizer') do |tmpdir|
+      Dir.chdir(tmpdir) do
+        yield tmpdir
       end
     end
+  end
+
+  def self.start_line(text, indent = 0)
+    putflush("#{' ' * 2 * indent}#{text}")
+  end
+
+  def self.tick
+    putflush(" \u2713")
+  end
+
+  def self.end_line
+    puts
+  end
+
+  def self.putflush(text)
+    $stdout.write(text)
+    $stdout.flush
   end
 end
