@@ -85,8 +85,8 @@ module Alchemizer
         inputs: options[:inputs].split(',').map { |path| File.expand_path(path, Dir.pwd) },
         evidence: options[:evidence].split(',').map { |path| File.expand_path(path, Dir.pwd) },
         result: File.expand_path(options[:result], Dir.pwd),
-        query: options[:query] && MLN::Query.parse_opt(options[:query]),
-        query_file: options[:query_file] && MLN::Query.parse_file(options[:query_file]),
+        query: options[:query],
+        query_file: options[:query_file],
         opts: options[:opts]&.shellsplit
       )
     end

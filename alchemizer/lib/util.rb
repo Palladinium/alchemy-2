@@ -44,6 +44,13 @@ module Alchemizer
       parse(File.read(filename), *args, **kwargs)
     end
 
+    def run_parser(parser, input, **opts)
+      match = parser.parse(input, consume_all_input: true, **opts)
+      raise AlchemizerError, parser.failure_reason unless match
+
+      match
+    end
+
     def parse_lines(parser, input, **opts)
       output = []
 
@@ -52,7 +59,7 @@ module Alchemizer
         break if input.empty?
 
         match = parser.parse(input, consume_all_input: false, **opts)
-        raise parser.failure_reason unless match
+        raise AlchemizerError, parser.failure_reason unless match
 
         out = yield match
         output << out
@@ -70,16 +77,21 @@ module Alchemizer
       obj2 = self.class.parse(out, *args, **kwargs)
       out2 = obj_2.emit
 
-      raise 'Parsing equivalence error' unless self == obj2 && out == out2
+      raise AlchemizerError, 'Parsing equivalence error' unless self == obj2 && out == out2
     end
   end
 
   def self.chdir_tmp
-    Dir.mktmpdir('alchemizer') do |tmpdir|
-      Dir.chdir(tmpdir) do
-        yield tmpdir
-      end
+    tmpdir = Dir.mktmpdir('alchemizer')
+
+    Dir.chdir(tmpdir) do
+      yield tmpdir
     end
+
+    FileUtils.remove_entry(tmpdir)
+  rescue StandardError
+    puts "Preserving temporary directory due to error: #{tmpdir}"
+    raise
   end
 
   def self.start_line(text, indent = 0)

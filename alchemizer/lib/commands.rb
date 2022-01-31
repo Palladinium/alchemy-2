@@ -5,19 +5,17 @@ require_relative 'util'
 require_relative 'mln'
 
 module Alchemizer
-  def self.infer(inputs:, evidence:, result:, query: nil, query_file: nil, opts: [])
+  def self.infer(inputs:, evidence:, result:, query: nil, query_file: nil, opts: [], stdout: nil, stderr: nil)
     infer_path = File.join(ALCHEMY_DIR, 'bin', 'infer')
 
     sol_mln_paths = inputs
     sol_db_paths = evidence
     sol_result_path = result
 
-    sol_query_opt = query
-    sol_query_file = query_file
+    sol_query_opt = query && MLN::Query.parse_opt(query)
+    sol_query_file = query_file && MLN::Query.parse_file(query_file)
 
     chdir_tmp do |tmpdir|
-      puts "Using tmpdir #{tmpdir}"
-
       fol_mln_paths = sol_mln_paths.each_with_index.map do |path, i|
         sol_mln = MLN::MLN.parse_file(path)
         fol_mln = sol_mln.sol2fol
@@ -71,12 +69,15 @@ module Alchemizer
 
       args += opts
 
-      puts "Running command #{args}"
+      spawn_opts = {}
 
-      pid = spawn(*args)
+      spawn_opts[:out] = [stdout, 'w'] if stdout
+      spawn_opts[:err] = [stderr, 'w'] if stderr
+
+      pid = spawn(*args, **spawn_opts)
       _pid, status = Process.wait2(pid)
 
-      raise "Alchemy command failed with status #{status.exitstatus}" unless status.success?
+      raise AlchemyError, "Alchemy command failed with status #{status.exitstatus}" unless status.success?
 
       fol_result = MLN::Result.parse_file(fol_result_path)
       sol_result = fol_result.compile(merged_fol_mln).fol2sol(merged_fol_mln)

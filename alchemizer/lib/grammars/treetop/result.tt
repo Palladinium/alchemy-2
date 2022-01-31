@@ -4,6 +4,30 @@ module Alchemizer
       include Alchemizer::Grammars::Logic
       include Alchemizer::Grammars::Common
 
+      rule result_file
+        (line:result_line newline rest:result_file) {
+          def value
+            [line.value].compact + rest.value
+          end
+        }
+
+        / (line:result_line) {
+          def value
+            [line.value].compact
+          end
+        }
+      end
+
+      rule result_line
+        result
+
+        / (dummy:space*) {
+          def value
+            nil
+          end
+        }
+      end
+
       rule result
         (a:atom space* v:(value?)) {
           def value

@@ -12,13 +12,21 @@ module Alchemizer
       ## Nonterminals
     
       rule quantified_sentence
-        (quantifier space* quantified_sentence) {
+        (quantifier space* vars:quantifier_variable* space* quantified_sentence) {
           def value
-            quantifier.value.new(quantified_sentence.value) 
+            quantifier.value.new(vars.elements.map(&:value), quantified_sentence.value) 
           end
         }
     
         / iff_sentence
+      end
+
+      rule quantifier_variable
+        (variable space* ','? space*) {
+          def value
+            variable.value
+          end
+        }
       end
     
       rule iff_sentence

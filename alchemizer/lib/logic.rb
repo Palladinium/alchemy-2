@@ -106,8 +106,8 @@ module Alchemizer
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
 
-      def compile(predicates:, **_other_keys)
-        self.class.new(*args.map { |arg| arg.compile(predicates: predicates) })
+      def compile(predicates:, **other_keys)
+        self.class.new(*args.map { |arg| arg.compile(predicates: predicates, **other_keys) })
       end
     end
 
@@ -138,8 +138,8 @@ module Alchemizer
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
 
-      def compile(predicates:, **_other_keys)
-        self.class.new(*args.map { |arg| arg.compile(predicates: predicates) })
+      def compile(predicates:, **other_keys)
+        self.class.new(*args.map { |arg| arg.compile(predicates: predicates, **other_keys) })
       end
     end
 
@@ -172,8 +172,57 @@ module Alchemizer
       def to_formula(outer_priority: nil)
         vars_s = vars.map(&:to_formula).join(',')
         arg_s = arg.to_formula(outer_priority: priority)
-        s = "#{op}(#{vars_s}) #{arg_s}"
+        s = "#{op} #{vars_s} #{arg_s}"
         wrap_priority(s, outer_priority)
+      end
+
+      def compile(predicates:, **_other_keys)
+        compiled_arg = arg.compile(predicates: predicates)
+
+        compiled_vars = vars.map do |var|
+          matching_args = compiled_arg.each_atom.flat_map(&:args).select do |arg|
+            case arg
+            when Variable
+              arg.name == var.name
+            else
+              false
+            end
+          end
+
+          types = matching_args.map(&:type).uniq
+          type = case types.length
+                 when 0
+                   raise AlchemizerError, "No matching use found for #{var.name} in #{to_formula}"
+                 when 1
+                   types[0]
+                 else
+                   raise AlchemizerError, "Multiple matching uses with different types found for #{var}: #{types}"
+                 end
+
+          var.compile(type: type)
+        end
+
+        self.class.new(compiled_vars, compiled_arg)
+      end
+    end
+
+    class Plus < NAryOperator
+      def op
+        '+'
+      end
+
+      def priority
+        7
+      end
+    end
+
+    class Minus < NAryOperator
+      def op
+        '-'
+      end
+
+      def priority
+        7
       end
     end
 
@@ -237,7 +286,7 @@ module Alchemizer
       end
     end
 
-    class Forall < QualifiedOperator
+    class ForAll < QualifiedOperator
       def op
         'forall'
       end
@@ -276,16 +325,36 @@ module Alchemizer
       end
 
       def resolve(value_name)
-        raise "Undefined constant '#{value_name}' for declared type '#{name}'" if !values[value_name] && locked?
+        case values
+        when Hash
+          if !values[value_name] && locked?
+            raise AlchemizerError, "Undefined constant '#{value_name}' for declared type '#{name}'"
+          end
 
-        values[value_name] ||= Constant.new(value_name, self)
+          values[value_name] ||= Constant.new(value_name, self)
+        when Range
+          unless values.include?(value_name.to_i)
+            raise AlchemizerError, "Constant #{value_name} is out of range for declared type '#{name}' #{values}"
+          end
+
+          Constant.new(value_name.to_i, self)
+        else
+          raise AlchemizerError, "Invalid type values: #{values}"
+        end
       end
 
       def emit
         return unless locked?
 
-        values_s = values.values.map(&:to_formula).join(',')
-        "#{name} = { #{values_s} }"
+        case values
+        when Hash
+          values_s = values.values.map(&:to_formula).join(',')
+          "#{name} = { #{values_s} }"
+        when Range
+          "#{name} = { #{values.begin}, ..., #{values.end} }"
+        else
+          raise AlchemizerError, "Invalid type values: #{values}"
+        end
       end
 
       def eql?(other)
@@ -305,11 +374,29 @@ module Alchemizer
           values.hash
       end
 
+      def each_value
+        case values
+        when Hash
+          values.values
+        when Range
+          values.map { |v| Constant.new(v, self) }
+        else
+          raise AlchemizerError, "Invalid type values: #{values}"
+        end
+      end
+
       private
 
       def initialize(name, values, locked:)
         @name = name.freeze
-        @values = values.each_with_object({}) { |v, h| h[v.name] = Constant.new(v.name, self) }
+        @values = case values
+                  when Array
+                    values.each_with_object({}) { |v, h| h[v.name] = Constant.new(v.name, self) }
+                  when Range
+                    values
+                  else
+                    raise AlchemizerError, "Invalid type values: #{values}"
+                  end
         @locked = locked
 
         return unless locked
@@ -367,10 +454,13 @@ module Alchemizer
       end
 
       def compile(types:, **_other_keys)
-        Arg.new(
-          types[type] ||= Type.new(type, {}, locked: false),
-          blocking?
-        )
+        compiled_type = if type == SOL_TYPE
+                          types[type] ||= Type.new(type, [], locked: false)
+                        else
+                          types[type] || raise(AlchemizerError, "Unknown type #{type}")
+                          #types[type] ||= Type.new(type, [], locked: false),
+                        end
+        Arg.new(compiled_type, blocking?)
       end
     end
 
@@ -422,13 +512,14 @@ module Alchemizer
       end
 
       def compile(predicates:, **_other_keys)
-        new_predicate = predicates[predicate] || raise("Undefined predicate #{predicate}")
+        new_predicate = predicates[predicate] || raise(AlchemizerError, "Undefined predicate #{predicate}")
 
-        unless new_predicate.args.length == args.length
-          raise <<-ERR
-            Mismatching number of arguments for predicate #{predicate}:
-            expected #{new_predicate.args.length}, got #{args.length}
-          ERR
+        expected = new_predicate.args.length
+        actual = args.length
+
+        unless actual == expected
+          raise AlchemizerError,
+                "Mismatching number of arguments for predicate #{predicate}: expected #{expected}, got #{actual}"
         end
 
         Atom.new(
@@ -537,7 +628,7 @@ module Alchemizer
                 when Variable # this grounding is tighter than self's
                   g.args.each_with_index.map { |parg, i| Variable.new("#{arg.name}__#{i}", parg.type) }
                 else
-                  raise 'Unreachable code'
+                  raise AlchemizerError, 'Unreachable code'
                 end
               else
                 [arg]
@@ -569,7 +660,8 @@ module Alchemizer
             else
               arg = args[0]
               if arg.type.name == FOL_SOL_TYPE
-                pred, grounding = sol_maps.grounding_map_inv[arg] || raise("Couldn't map back constant #{arg} to SOL")
+                pred, grounding = sol_maps.grounding_map_inv[arg] ||
+                  raise(AlchemizerError, "Couldn't map back constant #{arg} to SOL")
                 Atom.new(pred, grounding)
               else
                 arg
@@ -585,7 +677,7 @@ module Alchemizer
       attr_reader :name
 
       def initialize(name)
-        raise "Invalid constant name: #{name}" unless name[0] =~ /[a-z]/
+        raise AlchemizerError, "Invalid variable name: #{name}" unless name[0] =~ /[a-z]/
 
         @name = name.freeze
         freeze
@@ -621,7 +713,7 @@ module Alchemizer
 
       def initialize(name)
         unless name.is_a?(Integer) || (name.is_a?(String) && !name.empty? && name[0] =~ /[A-Z0-1]/)
-          raise "Invalid constant name: '#{name}'"
+          raise AlchemizerError, "Invalid constant name: '#{name}'"
         end
 
         @name = name.freeze

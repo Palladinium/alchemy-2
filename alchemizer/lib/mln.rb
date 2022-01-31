@@ -133,14 +133,14 @@ module Alchemizer
                           .map { |r| r.compile(predicates: predicates) }
 
         unless statements.empty?
-          raise "#{statements.length} unrecognized statements: #{statements.map(&:to_s).join("\n")}"
+          raise AlchemizerError, "#{statements.length} unrecognized statements: #{statements.map(&:to_s).join("\n")}"
         end
 
         MLN.new(types: types, predicates: predicates, rules: rules)
       end
 
       def self.parse(input)
-        compile(parse_lines(Grammars::MLNStatementParser.new, input, &:value).reject(&:nil?))
+        compile(run_parser(Grammars::MLNParser.new, input).value)
       end
 
       # TODO: What the heck am I doing here?
@@ -153,7 +153,7 @@ module Alchemizer
         fol_predicates = predicates.values - sol_predicates
 
         sol_grounding_map = fol_predicates.each_with_object({}) do |pred, h|
-          groundings = pred.args.map { |arg| arg.type.values.values }.products
+          groundings = pred.args.map { |arg| arg.type.each_value.to_a }.products
 
           h[pred] = groundings.each_with_object({}) do |g, hh|
             args_s = g.map { |a| "__#{a.name}" }.join
@@ -221,7 +221,7 @@ module Alchemizer
            .flat_map do |pred_grounding, new_pred|
             groundings = pred_grounding.map do |g|
               if g
-                g.args.map { |a| a.type.values.values }.products
+                g.args.map { |a| a.type.each_value.to_a }.products
               else
                 [nil]
               end
@@ -235,7 +235,7 @@ module Alchemizer
                     pred_grounding.zip(grounding, pred.args).each_with_index.map do |(p, g, arg), i|
                       if g
                         c = sol_grounding_map.dig(p, g)
-                        raise 'Inconsistent lookup tables' unless c
+                        raise AlchemizerError, 'Inconsistent lookup tables' unless c
 
                         c
                       else
@@ -286,7 +286,7 @@ module Alchemizer
       end
 
       def merge(other)
-        raise 'Cannot merge sol-mapped MLNs' if sol_maps || other.sol_maps
+        raise AlchemizerError, 'Cannot merge sol-mapped MLNs' if sol_maps || other.sol_maps
 
         MLN.new(
           types: types.merge(other.types),
@@ -329,11 +329,11 @@ module Alchemizer
       end
 
       def self.parse_opt(opt)
-        new(Grammars::QueryParser.new.parse(opt, root: :opt).value)
+        new(run_parser(Grammars::QueryParser.new, opt, root: :opt).value)
       end
 
       def self.parse(input)
-        new(parse_lines(Grammars::QueryParser.new, input, root: :element, &:value).reject(&:nil?))
+        new(run_parser(Grammars::QueryParser.new, input, root: :query_file).value)
       end
 
       def compile(mln)
@@ -343,19 +343,21 @@ module Alchemizer
             when Logic::AtomDecl
               a.compile(predicates: mln.predicates)
             when String
-              pred = mln.predicates[a] || raise("Invalid predicate '#{a}'")
+              pred = mln.predicates[a] || raise(AlchemizerError, "Invalid predicate '#{a}'")
               Logic::Atom.new(
                 pred,
                 pred.args.each_with_index.map { |arg, i| Logic::Variable.new("var__#{i}", arg.type) }
               )
             else
-              raise "Invalid query atom '#{a}'"
+              raise AlchemizerError, "Invalid query atom '#{a}'"
             end
           end
         )
       end
 
       def sol2fol(mln)
+        return self if mln.sol_maps.nil?
+
         Query.new(atoms.flat_map { |a| a.sol2fol_all(mln.sol_maps) })
       end
 
@@ -377,7 +379,7 @@ module Alchemizer
       end
 
       def self.parse(input)
-        new(parse_lines(Grammars::ResultParser.new, input, &:value).reject(&:nil?).to_h)
+        new(run_parser(Grammars::ResultParser.new, input).value.to_h)
       end
 
       def compile(mln)
@@ -385,6 +387,8 @@ module Alchemizer
       end
 
       def fol2sol(mln)
+        return self if mln.sol_maps.nil?
+
         Result.new(
           atoms
             .reject { |k, _| mln.sol_maps.predicate_map_inv[k]&.dig(1)&.any?(&:nil?) }

@@ -4,6 +4,34 @@ module Alchemizer
       include Alchemizer::Grammars::Logic
       include Alchemizer::Grammars::Common
 
+      rule query_file
+        (line:query_file_line newline rest:query_file) {
+          def value
+            [line.value].compact + rest.value
+          end
+        }
+
+        / (line:query_file_line) {
+          def value
+            [line.value].compact
+          end
+        }
+      end
+
+      rule query_file_line
+        (space* element space*) {
+          def value
+            element.value
+          end
+        }
+
+        / (dummy:space*) {
+          def value
+            nil
+          end
+        }
+      end
+
       rule opt
         (e:element ',' rest:opt) {
           def value

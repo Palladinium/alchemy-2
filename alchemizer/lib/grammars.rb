@@ -13,8 +13,8 @@ module Alchemizer
 
     Treetop.load(File.join(GRAMMARS_DIR, 'common.tt'))
     Treetop.load(File.join(GRAMMARS_DIR, 'logic.tt'))
-    Treetop.load(File.join(GRAMMARS_DIR, 'mln_statement.tt'))
-    Treetop.load(File.join(GRAMMARS_DIR, 'db_statement.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'mln.tt'))
+    Treetop.load(File.join(GRAMMARS_DIR, 'db.tt'))
     Treetop.load(File.join(GRAMMARS_DIR, 'query.tt'))
     Treetop.load(File.join(GRAMMARS_DIR, 'result.tt'))
   end

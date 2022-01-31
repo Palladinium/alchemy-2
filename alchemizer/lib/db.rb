@@ -22,26 +22,21 @@ module Alchemizer
         l1 = statements.length
         l2 = compiled_statements.length
 
-        raise "Statements length changed from #{l1} to #{l2} - there may be a hash collision" unless l1 == l2
+        raise AlchemizerError, "Statements length changed from #{l1} to #{l2} - there may be a hash collision" unless l1 == l2
 
         DB.new(compiled_statements, mln: mln)
       end
 
       def self.parse(input, mln:)
-        compile(
-          parse_lines(
-            Grammars::DBStatementParser.new,
-            input,
-            &:value
-          ).reject(&:nil?).each_with_object({}) do |(atom, atom_value), h|
-            raise "Invalid atom #{atom}" unless atom.is_a?(Logic::AtomDecl)
-            raise "Invalid atom value #{atom_value}" unless [nil, true, false].include?(atom_value)
-            raise "Multiple instances of atom '#{atom.to_formula}' in db" if h.key?(atom)
+        statements = run_parser(Grammars::DBParser.new, input).value.each_with_object({}) do |(atom, atom_value), h|
+          raise AlchemizerError, "Invalid atom #{atom}" unless atom.is_a?(Logic::AtomDecl)
+          raise AlchemizerError, "Invalid atom value #{atom_value}" unless [nil, true, false].include?(atom_value)
+          raise AlchemizerError, "Multiple instances of atom '#{atom.to_formula}' in db" if h.key?(atom)
 
-            h[atom] = atom_value
-          end,
-          mln: mln
-        )
+          h[atom] = atom_value
+        end
+
+        compile(statements, mln: mln)
       end
 
       def emit
@@ -56,7 +51,7 @@ module Alchemizer
           when nil
             "?#{f}"
           else
-            raise "Invalid atom value #{atom_value}"
+            raise AlchemizerError, "Invalid atom value #{atom_value}"
           end
         end.join("\n")
       end

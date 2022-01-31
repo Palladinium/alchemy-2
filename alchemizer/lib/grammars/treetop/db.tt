@@ -1,8 +1,32 @@
 module Alchemizer
   module Grammars
-    grammar DBStatement
+    grammar DB
       include Alchemizer::Grammars::Logic
       include Alchemizer::Grammars::Common
+
+      rule db
+        (line:db_line newline rest:db) {
+          def value
+           [line.value].compact + rest.value
+          end
+        }
+
+        / (line:db_line) {
+          def value
+            [line.value].compact
+          end
+        }
+      end
+
+      rule db_line
+        statement
+
+        / (space*) {
+          def value
+            nil
+          end
+        }
+      end
 
       rule statement
         comment

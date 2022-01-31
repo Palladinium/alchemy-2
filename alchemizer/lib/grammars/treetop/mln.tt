@@ -1,11 +1,41 @@
 module Alchemizer
   module Grammars
-    grammar MLNStatement
+    grammar MLN
       include Alchemizer::Grammars::Logic
       include Alchemizer::Grammars::Common
 
       ## Root
-    
+
+      rule mln
+        (line:mln_line newline rest:mln) {
+          def value
+            [line.value].compact + rest.value
+          end 
+        }
+
+        / (line:mln_line) {
+          def value
+            [line.value].compact
+          end
+        }
+      end
+
+      ## Nonterminals
+
+      rule mln_line
+        (space* statement space*) {
+          def value
+            statement.value
+          end
+        }
+
+        / (dummy:space*) {
+          def value
+            nil
+          end
+        }
+      end
+
       rule statement
         comment
         / type_decl
@@ -13,8 +43,6 @@ module Alchemizer
         / strong_rule
         / pred_decl
       end
-
-      ## Nonterminals
     
       rule type_decl
         (type_name space* '=' space* '{' type_decl_int_values '}') {
@@ -25,7 +53,7 @@ module Alchemizer
     
         / (type_name space* '=' space* '{' space* start_val:int space* ',' space* '...' space* ',' space* end_val:int space* '}') {
           def value
-            Alchemizer::Logic::TypeDecl.new(type_name.text_value, ((start_val.value)..(end_val.value)).map { |v| Alchemizer::Logic::ConstantDecl.new(v) }.to_a)
+            Alchemizer::Logic::TypeDecl.new(type_name.text_value, (start_val.value)..(end_val.value))
           end
         }
     
@@ -68,7 +96,6 @@ module Alchemizer
         }
       end
 
-    
       rule pred_decl
         pred_name space* pred_decl_args_parens {
           def value
@@ -131,9 +158,27 @@ module Alchemizer
     
       rule arg
         sol_atom
-        / variable
-        / constant
+
+        / (lhs:num_arg space* '+' space* rhs:num_arg) {
+          def value
+            Alchemizer::Logic::Plus.new(lhs.value, rhs.value) 
+          end
+        }
+
+        / (lhs:num_arg space* '-' space* rhs:num_arg) {
+          def value
+            Alchemizer::Logic::Minus.new(lhs.value, rhs.value) 
+          end
+        }
+
+        / num_arg
       end
+
+      rule num_arg
+        variable
+        / constant
+      end  
+
     end
   end
 end

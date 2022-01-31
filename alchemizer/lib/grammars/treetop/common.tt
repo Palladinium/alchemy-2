@@ -12,7 +12,7 @@ module Alchemizer
       end
     
       rule comment
-        (('//' (!newline .)* newline?)
+        (('//' (!newline .)*)
         / ('/*' (!'*/' (. / newline))* '*/'))
         {
           def value
@@ -30,7 +30,7 @@ module Alchemizer
       end
     
       rule int
-        [0-9]+ {
+        ('-'? [0-9]+) {
           def value
             Integer(text_value)
           end
