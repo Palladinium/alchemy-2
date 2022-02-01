@@ -348,7 +348,7 @@ module Alchemizer
 
         case values
         when Hash
-          values_s = values.values.map(&:to_formula).join(',')
+          values_s = values.values.map(&:to_formula).join(', ')
           "#{name} = { #{values_s} }"
         when Range
           "#{name} = { #{values.begin}, ..., #{values.end} }"
@@ -529,7 +529,7 @@ module Alchemizer
       end
 
       def to_formula(**other_keys)
-        args_s = args.map { |a| a.to_formula(**other_keys) }.join(',')
+        args_s = args.map { |a| a.to_formula(**other_keys) }.join(', ')
         "#{predicate}(#{args_s})"
       end
 

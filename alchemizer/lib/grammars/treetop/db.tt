@@ -21,7 +21,7 @@ module Alchemizer
       rule db_line
         statement
 
-        / (space*) {
+        / (dummy:space*) {
           def value
             nil
           end
