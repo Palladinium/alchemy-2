@@ -15,8 +15,12 @@ module Alchemizer
     end
 
     module Formula
+      include Comparable
+
       def each_grounding(&block)
         vars_ = all_vars
+
+        return [self] if vars_.empty?
 
         if block
           vars_.map { |v| v.type.values }.products do |renaming|
@@ -59,6 +63,10 @@ module Alchemizer
       def eql?(other)
         other.respond_to?(:to_formula) &&
           to_formula.eql?(other.to_formula)
+      end
+
+      def <=>(other)
+        to_formula <=> other.to_formula
       end
     end
 
@@ -692,6 +700,32 @@ module Alchemizer
 
       def transform_atoms
         yield self
+      end
+
+      # TODO: These are VERY inefficient
+      def markov_blanket(mln)
+        each_grounding.flat_map do |ground_atom|
+          mln.rules.flat_map do |rule|
+            rule_blanket = rule.formula.each_ground_atom
+
+            if rule_blanket.include?(ground_atom)
+              rule_blanket
+            else
+              []
+            end
+          end - [ground_atom]
+        end.uniq
+      end
+
+      def transitive_markov_blanket(mln)
+        blanket = markov_blanket(mln).sort
+
+        loop do
+          new_blanket = blanket.flat_map { |a| a.markov_blanket(mln) }.uniq.sort
+          return blanket if new_blanket == blanket
+
+          blanket = new_blanket
+        end
       end
 
       def sol2fol(sol_maps)
