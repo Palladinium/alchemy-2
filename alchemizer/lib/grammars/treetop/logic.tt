@@ -2,22 +2,22 @@ module Alchemizer
   module Grammars
     grammar Logic
       include Alchemizer::Grammars::Common
-    
+
       ## Root
-    
+
       rule sentence
         quantified_sentence
       end
 
       ## Nonterminals
-    
+
       rule quantified_sentence
         (quantifier space* vars:quantifier_variable* space* quantified_sentence) {
           def value
-            quantifier.value.new(vars.elements.map(&:value), quantified_sentence.value) 
+            quantifier.value.new(vars.elements.map(&:value), quantified_sentence.value)
           end
         }
-    
+
         / iff_sentence
       end
 
@@ -28,59 +28,59 @@ module Alchemizer
           end
         }
       end
-    
+
       rule iff_sentence
         (implies_sentence space* '<=>' space* iff_sentence) {
           def value
-            Alchemizer::Logic::IFF.new(implies_sentence.value, iff_sentence.value) 
+            Alchemizer::Logic::IFF.new(implies_sentence.value, iff_sentence.value)
           end
         }
-    
+
         / implies_sentence
       end
-    
+
       rule implies_sentence
         (or_sentence space* '=>' space* implies_sentence) {
           def value
-            Alchemizer::Logic::Implies.new(or_sentence.value, implies_sentence.value) 
+            Alchemizer::Logic::Implies.new(or_sentence.value, implies_sentence.value)
           end
         }
-    
+
         / or_sentence
       end
-    
+
       rule or_sentence
         (and_sentence space* 'v' space* or_sentence) {
           def value
-            Alchemizer::Logic::Or.new(and_sentence.value, or_sentence.value) 
+            Alchemizer::Logic::Or.new(and_sentence.value, or_sentence.value)
           end
         }
         / and_sentence
       end
-    
+
       rule and_sentence
         (not_sentence space* '^' space* and_sentence) {
           def value
-            Alchemizer::Logic::And.new(not_sentence.value, and_sentence.value) 
+            Alchemizer::Logic::And.new(not_sentence.value, and_sentence.value)
           end
         }
         / not_sentence
       end
-    
+
       rule not_sentence
         ('(' space* sentence space* ')') {
           def value
-            sentence.value 
+            sentence.value
           end
         }
         / ('!' space* not_sentence) {
           def value
-            Alchemizer::Logic::Not.new(not_sentence.value) 
+            Alchemizer::Logic::Not.new(not_sentence.value)
           end
         }
         / atom
       end
-    
+
       rule atom
         (pred_name space* atom_args_parens) {
           def value
@@ -90,9 +90,9 @@ module Alchemizer
       end
 
       rule atom_args_parens
-        ('(' space* args:atom_arg* space* ')') {
+        ('(' space* args:atom_args space* ')') {
           def value
-            args.elements.map(&:value)
+            args.value
           end
         }
 
@@ -103,64 +103,82 @@ module Alchemizer
         }
       end
 
-      rule atom_arg
-        (a:arg space* ','? space*) {
+      rule atom_args
+        (a:arg space* ',' space* rest:atom_args) {
+          def value
+            [a.value] + rest.value
+          end
+        }
+
+        / (a:arg) {
+          def value
+            [a.value]
+          end
+        }
+
+        / '' {
+          def value
+            []
+          end
+        }
+      end
+
+      rule arg
+        sol_atom
+        / variable
+        / constant
+      end
+
+      rule sol_atom
+        ('$' space* a:atom) {
           def value
             a.value
           end
         }
       end
-    
-      rule sol_atom
-        ('$' space* a:atom) {
-          def value
-            a.value 
-          end
-        }
-      end
-    
+
       ## Terminals
-    
+
       rule type_name
         lowercase_name
       end
-    
+
       rule pred_name
         capitalized_name
       end
-    
+
       rule variable
         (name:lowercase_name) {
           def value
-            Alchemizer::Logic::VariableDecl.new(name.text_value) 
+            Alchemizer::Logic::VariableDecl.new(name.text_value)
           end
         }
       end
-    
+
       rule constant
         (val:int) {
           def value
-            Alchemizer::Logic::ConstantDecl.new(val.value) 
+            Alchemizer::Logic::ConstantDecl.new(val.value)
           end
         }
-    
+
         / (name:capitalized_name) {
           def value
-            Alchemizer::Logic::ConstantDecl.new(name.text_value) 
+            Alchemizer::Logic::ConstantDecl.new(name.text_value)
           end
         }
       end
-    
+
       rule quantifier
         'forall' {
           def value
-            Alchemizer::Logic::ForAll 
+            Alchemizer::Logic::ForAll
           end
         }
-    
+
         / 'exists' {
           def value
-            Alchemizer::Logic::Exists 
+            Alchemizer::Logic::Exists
           end
         }
       end

@@ -29,7 +29,7 @@ module Alchemizer
       end
 
       rule result
-        (a:atom space* v:(value?)) {
+        (a:atom space+ v:(value?)) {
           def value
             [
               a.value,
@@ -46,13 +46,14 @@ module Alchemizer
       rule value
         (!(space / newline) .)+ {
           def value
-            text_value
+            Float(text_value)
           end
         }
       end
 
       rule arg
-        constant
+        sol_atom
+        / constant
       end
     end
   end

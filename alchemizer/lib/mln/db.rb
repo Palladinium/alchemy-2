@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
-require_relative 'util'
-require_relative 'logic'
+require_relative '../util'
+require_relative '../errors'
+require_relative '../logic'
+require_relative 'db_file'
 
 module Alchemizer
-  module DB
+  module MLN
     class DB
       attr_reader :statements, :mln
 
@@ -16,27 +18,8 @@ module Alchemizer
         @statements = statements
       end
 
-      def self.compile(statements, mln:)
-        compiled_statements = statements.transform_keys { |a| a.compile(predicates: mln.predicates) }
-
-        l1 = statements.length
-        l2 = compiled_statements.length
-
-        raise AlchemizerError, "Statements length changed from #{l1} to #{l2} - there may be a hash collision" unless l1 == l2
-
-        DB.new(compiled_statements, mln: mln)
-      end
-
       def self.parse(input, mln:)
-        statements = run_parser(Grammars::DBParser.new, input).value.each_with_object({}) do |(atom, atom_value), h|
-          raise AlchemizerError, "Invalid atom #{atom}" unless atom.is_a?(Logic::AtomDecl)
-          raise AlchemizerError, "Invalid atom value #{atom_value}" unless [nil, true, false].include?(atom_value)
-          raise AlchemizerError, "Multiple instances of atom '#{atom.to_formula}' in db" if h.key?(atom)
-
-          h[atom] = atom_value
-        end
-
-        compile(statements, mln: mln)
+        DBFile.parse(input).compile(mln)
       end
 
       def emit

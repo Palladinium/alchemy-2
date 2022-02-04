@@ -69,15 +69,21 @@ module Alchemizer
 
       args += opts
 
-      spawn_opts = {}
+      Open3.popen3(*args) do |stdin, stdout_io, stderr_io, wait_thr|
+        stdin.close
 
-      spawn_opts[:out] = [stdout, 'w'] if stdout
-      spawn_opts[:err] = [stderr, 'w'] if stderr
+        status = wait_thr.value
 
-      pid = spawn(*args, **spawn_opts)
-      _pid, status = Process.wait2(pid)
+        stdout_s = stdout_io.read
+        stderr_s = stderr_io.read
 
-      raise AlchemyError, "Alchemy command failed with status #{status.exitstatus}" unless status.success?
+        File.write(stdout, stdout_s) if stdout
+        File.write(stderr, stderr_s) if stderr
+
+        raise AlchemyError, "Alchemy command failed with status #{status.exitstatus}" unless status.success?
+
+        raise AlchemyError, 'Alchemy has encountered errors' if /ERROR/.match?(stdout_s)
+      end
 
       fol_result = MLN::Result.parse_file(fol_result_path)
       sol_result = fol_result.compile(merged_fol_mln).fol2sol(merged_fol_mln)

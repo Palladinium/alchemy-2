@@ -1,9 +1,18 @@
 # frozen_string_literal: true
 
+require_relative 'util'
+require_relative 'grammars'
+
 module Alchemizer
   module Logic
     SOL_TYPE = '$'
     FOL_SOL_TYPE = 'sol__'
+
+    extend Parsable
+
+    def self.parse_sentence(input)
+      run_parser(Grammars::LogicParser.new, input).value
+    end
 
     module Formula
       def atoms
@@ -407,6 +416,7 @@ module Alchemizer
     end
 
     class PredicateDecl
+      extend Parsable
       attr_reader :name, :args
 
       def initialize(name, args)
@@ -417,6 +427,15 @@ module Alchemizer
 
       def compile(types:, **_other_keys)
         Predicate.new(name, args.map { |arg| arg.compile(types: types) })
+      end
+
+      def self.parse(input)
+        run_parser(Grammars::MLNParser.new, input, root: :pred_decl).value
+      end
+
+      def emit
+        args_s = args.map(&:emit).join(',')
+        "#{name}(#{args_s})"
       end
     end
 
@@ -454,12 +473,7 @@ module Alchemizer
       end
 
       def compile(types:, **_other_keys)
-        compiled_type = if type == SOL_TYPE
-                          types[type] ||= Type.new(type, [], locked: false)
-                        else
-                          types[type] || raise(AlchemizerError, "Unknown type #{type}")
-                          #types[type] ||= Type.new(type, [], locked: false),
-                        end
+        compiled_type = types[type] ||= Type.new(type, [], locked: false)
         Arg.new(compiled_type, blocking?)
       end
     end

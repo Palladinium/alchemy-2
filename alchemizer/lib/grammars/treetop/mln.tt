@@ -39,8 +39,7 @@ module Alchemizer
       rule statement
         comment
         / type_decl
-        / weighted_rule
-        / strong_rule
+        / mln_rule
         / pred_decl
       end
     
@@ -138,6 +137,11 @@ module Alchemizer
             Alchemizer::Logic::ArgDecl.new(Alchemizer::Logic::SOL_TYPE, !blocking.empty?)
           end
         }
+      end
+
+      rule mln_rule
+        weighted_rule
+        / strong_rule
       end
     
       rule weighted_rule

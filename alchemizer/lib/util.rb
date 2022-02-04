@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'pry'
+require_relative 'errors'
 
 class Array
   def consume(&block)
@@ -75,39 +75,27 @@ module Alchemizer
     def test_equivalence(*args, **kwargs)
       out = emit
       obj2 = self.class.parse(out, *args, **kwargs)
-      out2 = obj_2.emit
+      out2 = obj2.emit
 
-      raise AlchemizerError, 'Parsing equivalence error' unless self == obj2 && out == out2
+      raise AlchemizerError, 'Parsing value equivalence error' unless self == obj2
+      raise AlchemizerError, 'Parsing output equivalence error' unless out == out2
     end
   end
 
-  def self.chdir_tmp
-    tmpdir = Dir.mktmpdir('alchemizer')
+  def self.chdir_tmp(dir = nil)
+    FileUtils.mkdir_p(dir) if dir
 
-    Dir.chdir(tmpdir) do
+    tmpdir = dir || Dir.mktmpdir('alchemizer')
+
+    ret = Dir.chdir(tmpdir) do
       yield tmpdir
     end
 
-    FileUtils.remove_entry(tmpdir)
+    FileUtils.remove_entry(tmpdir) unless dir
+
+    ret
   rescue StandardError
-    puts "Preserving temporary directory due to error: #{tmpdir}"
+    puts "Preserving temporary directory due to error: #{tmpdir}" unless dir
     raise
-  end
-
-  def self.start_line(text, indent = 0)
-    putflush("#{' ' * 2 * indent}#{text}")
-  end
-
-  def self.tick
-    putflush(" \u2713")
-  end
-
-  def self.end_line
-    puts
-  end
-
-  def self.putflush(text)
-    $stdout.write(text)
-    $stdout.flush
   end
 end
