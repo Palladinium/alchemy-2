@@ -180,7 +180,7 @@ module Alchemizer
           fol_query_path = File.join(dir, 'query.db')
           File.write(fol_query_path, fol_query.emit)
 
-          fol_result_path = File.join(dir, 'out.result')
+          fol_result_path = File.join(dir, 'output.result')
 
           args = [
             infer_path,
@@ -215,7 +215,7 @@ module Alchemizer
       end
 
       def merge(other)
-        raise AlchemizerError, 'Cannot merge sol-mapped MLNs' if sol_maps || other.sol_maps
+        raise AlchemizerError, 'Cannot merge sol-mapped MLNs' if sol_mapped? || other.sol_mapped?
 
         MLN.new(
           types: types.merge(other.types),

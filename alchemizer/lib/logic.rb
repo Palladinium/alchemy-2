@@ -15,6 +15,34 @@ module Alchemizer
     end
 
     module Formula
+      def each_grounding(&block)
+        vars_ = all_vars
+
+        if block
+          vars_.map { |v| v.type.values }.products do |renaming|
+            yield rename(vars_.zip(renaming).to_h)
+          end
+        else
+          vars_.map { |v| v.type.each_value.to_a }.products.map do |renaming|
+            rename(vars_.zip(renaming).to_h)
+          end
+        end
+      end
+
+      def each_ground_atom(&block)
+        atoms_ = each_grounding.flat_map(&:each_atom).uniq
+
+        if block
+          atoms_.each(&block)
+        else
+          atoms_
+        end
+      end
+
+      def ground?
+        vars.empty?
+      end
+
       def atoms
         each_atom.to_a
       end
@@ -71,6 +99,14 @@ module Alchemizer
         self.class.new(arg.transform_atoms(&block))
       end
 
+      def rename(renaming)
+        self.class.new(arg.rename(renaming))
+      end
+
+      def all_vars
+        arg.all_vars
+      end
+
       def compile(predicates:, **_other_keys)
         self.class.new(arg.compile(predicates: predicates))
       end
@@ -111,6 +147,14 @@ module Alchemizer
         end
       end
 
+      def rename(renaming)
+        self.class.new(*args.map { |arg| arg.rename(renaming) })
+      end
+
+      def all_vars
+        args.flat_map(&:all_vars).uniq
+      end
+
       def transform_atoms(&block)
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
@@ -143,6 +187,14 @@ module Alchemizer
         end
       end
 
+      def rename(renaming)
+        self.class.new(*args.map { |arg| arg.rename(renaming) })
+      end
+
+      def all_vars
+        lhs.all_vars | rhs.all_vars
+      end
+
       def transform_atoms(&block)
         self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
       end
@@ -168,6 +220,28 @@ module Alchemizer
         @vars = vars.freeze
         @arg = arg.freeze
         freeze
+      end
+
+      def rename(renaming)
+        new_vars = vars.map do |var|
+          new_var = var.rename(renaming)
+
+          if new_var.is_a?(Constant) || new_var.is_a?(ConstantDecl)
+            raise AlchemizerError, 'Cannot ground qualified formula'
+          end
+
+          new_var
+        end.uniq
+
+        self.class.new(new_vars, arg.rename(renaming))
+      end
+
+      def each_ground_atom
+        arg.each_ground_atom
+      end
+
+      def all_vars
+        vars | arg.vars
       end
 
       def transform_atoms(&block)
@@ -328,9 +402,11 @@ module Alchemizer
 
       # Rename new to compile to make it clear it's not a trivial constructor
       def self.compile(name:, values:, **_other_keys)
-        Type.new(name,
-                 values,
-                 locked: true)
+        Type.new(
+          name,
+          values,
+          locked: true
+        )
       end
 
       def resolve(value_name)
@@ -473,7 +549,7 @@ module Alchemizer
       end
 
       def compile(types:, **_other_keys)
-        compiled_type = types[type] ||= Type.new(type, [], locked: false)
+        compiled_type = (types[type] ||= Type.new(type, [], locked: false))
         Arg.new(compiled_type, blocking?)
       end
     end
@@ -536,10 +612,19 @@ module Alchemizer
                 "Mismatching number of arguments for predicate #{predicate}: expected #{expected}, got #{actual}"
         end
 
-        Atom.new(
-          new_predicate,
-          args.zip(new_predicate.args).map { |arg, arg_decl| arg.compile(predicates: predicates, type: arg_decl.type) }
-        )
+        new_args = args.zip(new_predicate.args).map do |arg, arg_decl|
+          arg.compile(predicates: predicates, type: arg_decl.type)
+        end
+
+        Atom.new(new_predicate, new_args)
+      end
+
+      def rename(renaming)
+        self.class.new(predicate, args.map { |arg| arg.rename(renaming) })
+      end
+
+      def all_vars
+        args.flat_map(&:each_var).uniq
       end
 
       def to_formula(**other_keys)
@@ -597,6 +682,14 @@ module Alchemizer
         end
       end
 
+      def rename(renaming)
+        self.class.new(predicate, args.map { |arg| arg.rename(renaming) })
+      end
+
+      def all_vars
+        args.flat_map(&:all_vars).uniq
+      end
+
       def transform_atoms
         yield self
       end
@@ -632,24 +725,24 @@ module Alchemizer
         expanded
           .select { |grounding, _| upper_grounding.zip(grounding).all? { |u, g| u.nil? || u == g } }
           .map do |grounding, fol_pred|
-          Atom.new(
-            fol_pred,
-            args.zip(grounding).flat_map do |arg, g|
-              if g
-                case arg
-                when Atom
-                  arg.args
-                when Variable # this grounding is tighter than self's
-                  g.args.each_with_index.map { |parg, i| Variable.new("#{arg.name}__#{i}", parg.type) }
+            Atom.new(
+              fol_pred,
+              args.zip(grounding).flat_map do |arg, g|
+                if g
+                  case arg
+                  when Atom
+                    arg.args
+                  when Variable # this grounding is tighter than self's
+                    g.args.each_with_index.map { |parg, i| Variable.new("#{arg.name}__#{i}", parg.type) }
+                  else
+                    raise AlchemizerError, 'Unreachable code'
+                  end
                 else
-                  raise AlchemizerError, 'Unreachable code'
+                  [arg]
                 end
-              else
-                [arg]
               end
-            end
-          )
-        end
+            )
+          end
       end
 
       def fol2sol(sol_maps)
@@ -701,6 +794,22 @@ module Alchemizer
         Variable.new(name, type)
       end
 
+      def rename(renaming)
+        new_v = renaming[self] || self
+
+        unless new_v.is_a?(VariableDecl) || new_v.is_a?(ConstantDecl)
+          raise TypeError, "Invalid renaming: #{self.class} => #{new_v.class}"
+        end
+
+        raise AlchemizerError, "Mismatching types in renaming: #{type} => #{new_v.type}" unless new_v.type == type
+
+        new_v
+      end
+
+      def all_vars
+        [self]
+      end
+
       def to_formula(**_other_keys)
         name
       end
@@ -714,6 +823,22 @@ module Alchemizer
         @name = name.freeze
         @type = type.freeze
         freeze
+      end
+
+      def rename(renaming)
+        new_v = renaming[self] || self
+
+        unless new_v.is_a?(Variable) || new_v.is_a?(Constant)
+          raise TypeError, "Invalid renaming: #{self.class} => #{new_v.class}"
+        end
+
+        raise AlchemizerError, "Mismatching types in renaming: #{type} => #{new_v.type}" unless new_v.type == type
+
+        new_v
+      end
+
+      def all_vars
+        [self]
       end
 
       def to_formula(**_other_keys)
@@ -738,6 +863,14 @@ module Alchemizer
         type.resolve(name)
       end
 
+      def rename(_renaming)
+        self
+      end
+
+      def all_vars
+        []
+      end
+
       def to_formula(**_other_keys)
         name
       end
@@ -753,6 +886,14 @@ module Alchemizer
         @name = name.freeze
         @type = type # Do not freeze the type as we are being added to it
         freeze
+      end
+
+      def rename(_renaming)
+        self
+      end
+
+      def all_vars
+        []
       end
 
       def to_formula(**_other_keys)
