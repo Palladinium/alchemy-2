@@ -12,6 +12,27 @@ require_relative 'mln_sol_maps'
 
 module Alchemizer
   module MLN
+    class Output
+      attr_reader :stdout, :stderr, :result, :true_counts
+
+      def initialize(stdout:, stderr:, result:, true_counts:)
+        @stdout = stdout
+        @stderr = stderr
+        @result = result
+        @true_counts = true_counts
+      end
+    end
+
+    class TrueCounts
+      attr_reader :actual, :max, :n_groundings
+
+      def initialize(actual:, max:, n_groundings:)
+        @actual = actual
+        @max = max
+        @n_groundings = n_groundings
+      end
+    end
+
     class MLN
       attr_reader :rules, :types, :predicates, :sol_maps
 
@@ -159,7 +180,37 @@ module Alchemizer
         )
       end
 
-      def infer(evidence:, query:, log_dir: nil)
+      def flatten_quantifiers
+        raise 'Cannot ground SOL-mapped MLN' if sol_mapped?
+
+        MLN.new(
+          types: types,
+          predicates: predicates,
+          rules: rules.flat_map(&:flatten_quantifiers),
+          sol_maps: sol_maps
+        )
+      end
+
+      def convert_cnf
+        raise 'Cannot convert to CNF SOL-mapped MLN' if sol_mapped?
+
+        new_rules =
+          rules
+          .flat_map(&:flatten_quantifiers)
+          .map(&:convert_cnf)
+          .group_by(&:formula)
+          .transform_values { |g| g.map(&:weight).sum }
+          .map { |formula, weight| MLNRule.new(formula, weight) }
+
+        MLN.new(
+          types: types,
+          predicates: predicates,
+          rules: new_rules,
+          sol_maps: sol_maps
+        )
+      end
+
+      def infer(evidence:, query:, log_dir: nil, args: [])
         infer_path = File.join(ALCHEMY_DIR, 'bin', 'infer')
 
         raise TypeError, "Expected #{DB.class}, got #{evidence.class}" unless evidence.is_a?(DB)
@@ -187,11 +238,14 @@ module Alchemizer
             '-i', fol_mln_path,
             '-e', fol_evidence_path,
             '-f', fol_query_path,
-            '-r', fol_result_path
+            '-r', fol_result_path,
+            *args
           ]
 
           stdout_path = File.join(dir, 'alchemy.out')
           stderr_path = File.join(dir, 'alchemy.err')
+          stdout_s = nil
+          stderr_s = nil
 
           Open3.popen3(*args) do |stdin, stdout_io, stderr_io, wait_thr|
             stdin.close
@@ -210,7 +264,53 @@ module Alchemizer
           end
 
           fol_result = Result.parse_file(fol_result_path)
-          fol_result.compile(fol_mln).fol2sol(fol_mln)
+          result = fol_result.compile(fol_mln).fol2sol(fol_mln)
+
+          clause_true_counts =
+            stdout_s
+            .lines
+            .drop_while { |l| !/BEGIN CLAUSE TRUE COUNTS/.match?(l) }
+            .drop(1)
+            .take_while { |l| !/END CLAUSE TRUE COUNTS/.match?(l) }
+            .map { |l| %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\)}.match(l).captures }
+            .group_by { |m| Integer(m[0]) }
+            .transform_values do |g|
+              raise 'Multiple true counts for clause' unless g.length == 1
+
+              m = g[0]
+              TrueCounts.new(actual: Integer(m[1]), max: Integer(m[2]), n_groundings: Integer(m[3]))
+            end
+
+          clause_count = 0
+
+          true_counts =
+            stdout_s
+            .lines
+            .drop_while { |l| !/BEGIN CNF CONVERSION RESULT/.match?(l) }
+            .drop(1)
+            .take_while { |l| !/END CNF CONVERSION RESULT/.match?(l) }
+            .map { |l| /\Aformula (\d+) idx (\d+):/.match(l).captures }
+            .group_by { |m| Integer(m[0]) }
+            .transform_values do |g|
+              counts = g.map do |m|
+                clause_true_counts.fetch(clause_count + Integer(m[1]))
+              end
+
+              clause_count += counts.length
+
+              counts
+            end
+
+          raise 'Mismatching clause counts' if clause_true_counts.key?(clause_count)
+
+          raise 'Mismatching rule counts' unless true_counts.length == rules.length
+
+          Output.new(
+            stdout: stdout_s,
+            stderr: stderr_s,
+            result: result,
+            true_counts: true_counts
+          )
         end
       end
 

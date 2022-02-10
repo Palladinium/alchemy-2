@@ -37,6 +37,15 @@ module Alchemizer
         end
       end
 
+      def flatten_quantifiers
+        formula.flatten_quantifiers.map { |f| self.class.new(f, weight) }
+      end
+
+      def conver_cnf
+        clauses = formula.convert_cnf
+        clauses.map { |f| self.class.new(f, Float(weight) / Float(clauses.length)) }
+      end
+
       def eql?(other)
         self.class.eql?(other.class) &&
           weight.eql?(other.weight) &&

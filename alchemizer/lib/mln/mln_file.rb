@@ -27,6 +27,10 @@ module Alchemizer
         new(run_parser(Grammars::MLNParser.new, input).value)
       end
 
+      def merge(other)
+        self.class.new(statements + other.statements)
+      end
+
       def compile
         to_parse = statements.clone
 

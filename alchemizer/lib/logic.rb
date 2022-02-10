@@ -17,18 +17,18 @@ module Alchemizer
     module Formula
       include Comparable
 
-      def each_grounding(&block)
+      def each_grounding(**kwargs, &block)
         vars_ = all_vars
 
         return [self] if vars_.empty?
 
         if block
           vars_.map { |v| v.type.values }.products do |renaming|
-            yield rename(vars_.zip(renaming).to_h)
+            yield rename(vars_.zip(renaming).to_h, **kwargs)
           end
         else
           vars_.map { |v| v.type.each_value.to_a }.products.map do |renaming|
-            rename(vars_.zip(renaming).to_h)
+            rename(vars_.zip(renaming).to_h, **kwargs)
           end
         end
       end
@@ -67,6 +67,23 @@ module Alchemizer
 
       def <=>(other)
         to_formula <=> other.to_formula
+      end
+
+      def to_s
+        to_formula
+      end
+
+      def flatten_quantifiers
+        flatten_existential_quantifiers.each_grounding(strip_universal_quantifiers: true)
+      end
+
+      def convert_cnf
+        convert_nnf
+          .standardize_variables
+          .move_quantifiers_outwards
+          .flatten_existential_quantifiers
+          .drop_universal_quantifiers
+          .distribute_or_inwards
       end
     end
 
@@ -107,8 +124,8 @@ module Alchemizer
         self.class.new(arg.transform_atoms(&block))
       end
 
-      def rename(renaming)
-        self.class.new(arg.rename(renaming))
+      def rename(renaming, **kwargs)
+        self.class.new(arg.rename(renaming, **kwargs))
       end
 
       def all_vars
@@ -117,6 +134,14 @@ module Alchemizer
 
       def compile(predicates:, **_other_keys)
         self.class.new(arg.compile(predicates: predicates))
+      end
+
+      def flatten_existential_quantifiers
+        self.class.new(arg.flatten_existential_quantifiers)
+      end
+
+      def standardize_variables
+        self.class.new(arg.standardize_variables)
       end
     end
 
@@ -127,6 +152,64 @@ module Alchemizer
       def to_formula(outer_priority: nil)
         args_s = args.map { |arg| arg.to_formula(outer_priority: priority) }.join(" #{op} ")
         wrap_priority(args_s, outer_priority)
+      end
+
+      def each_atom(&block)
+        if block
+          args.each do |arg|
+            arg.each_atom(&block)
+          end
+        else
+          args.flat_map(&:each_atom)
+        end
+      end
+
+      def rename(renaming, **kwargs)
+        self.class.new(*args.map { |arg| arg.rename(renaming, **kwargs) })
+      end
+
+      def all_vars
+        args.flat_map(&:all_vars).uniq
+      end
+
+      def transform_atoms(&block)
+        self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
+      end
+
+      def compile(predicates:, **other_keys)
+        self.class.new(*args.map { |arg| arg.compile(predicates: predicates, **other_keys) })
+      end
+
+      def flatten_existential_quantifiers
+        self.class.new(*args.map(&:flatten_existential_quantifiers))
+      end
+
+      def convert_nnf
+        self.class.new(*args.map(&:convert_nnf))
+      end
+
+      def standardize_variables
+        scoped_variables = []
+
+        new_args = args.map do |arg|
+          renaming = arg.all_scoped_vars.map do |var|
+            if scoped_variables.include?(var)
+              new_var = var
+
+              new_var = new_var.gen_new while scoped_variables.include?(new_var)
+
+              scoped_variables << new_var
+              [var, new_var]
+            else
+              scoped_variables << var
+              nil
+            end
+          end.compact.to_h
+
+          arg.rename(renaming)
+        end
+
+        self.class.new(*new_args)
       end
     end
 
@@ -144,32 +227,6 @@ module Alchemizer
         end.freeze
         freeze
       end
-
-      def each_atom(&block)
-        if block
-          args.each do |arg|
-            arg.each_atom(&block)
-          end
-        else
-          args.flat_map(&:each_atom)
-        end
-      end
-
-      def rename(renaming)
-        self.class.new(*args.map { |arg| arg.rename(renaming) })
-      end
-
-      def all_vars
-        args.flat_map(&:all_vars).uniq
-      end
-
-      def transform_atoms(&block)
-        self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
-      end
-
-      def compile(predicates:, **other_keys)
-        self.class.new(*args.map { |arg| arg.compile(predicates: predicates, **other_keys) })
-      end
     end
 
     class BinaryOperator
@@ -184,31 +241,6 @@ module Alchemizer
 
       def args
         [lhs, rhs]
-      end
-
-      def each_atom(&block)
-        if block
-          lhs.each_atom(&block)
-          rhs.each_atom(&block)
-        else
-          args.flat_map(&:each_atom)
-        end
-      end
-
-      def rename(renaming)
-        self.class.new(*args.map { |arg| arg.rename(renaming) })
-      end
-
-      def all_vars
-        lhs.all_vars | rhs.all_vars
-      end
-
-      def transform_atoms(&block)
-        self.class.new(*args.map { |arg| arg.transform_atoms(&block) })
-      end
-
-      def compile(predicates:, **other_keys)
-        self.class.new(*args.map { |arg| arg.compile(predicates: predicates, **other_keys) })
       end
     end
 
@@ -230,26 +262,12 @@ module Alchemizer
         freeze
       end
 
-      def rename(renaming)
-        new_vars = vars.map do |var|
-          new_var = var.rename(renaming)
-
-          if new_var.is_a?(Constant) || new_var.is_a?(ConstantDecl)
-            raise AlchemizerError, 'Cannot ground qualified formula'
-          end
-
-          new_var
-        end.uniq
-
-        self.class.new(new_vars, arg.rename(renaming))
-      end
-
       def each_ground_atom
         arg.each_ground_atom
       end
 
       def all_vars
-        vars | arg.vars
+        vars | arg.all_vars
       end
 
       def transform_atoms(&block)
@@ -295,6 +313,14 @@ module Alchemizer
 
         self.class.new(compiled_vars, compiled_arg)
       end
+
+      def convert_nnf
+        self.class.new(vars, arg.convert_nnf)
+      end
+
+      def standardize_variables
+        # TODO
+      end
     end
 
     class Plus < NAryOperator
@@ -324,6 +350,25 @@ module Alchemizer
 
       def priority
         6
+      end
+
+      def convert_nnf
+        case arg.convert_nnf
+        when Not
+          arg.arg
+        when And
+          Or.new(*arg.args.map { |a| Not.new(a).convert_nnf })
+        when Or
+          And.new(*arg.args.map { |a| Not.new(a).convert_nnf })
+        when Exists
+          ForAll.new(arg.vars, Not.new(arg.arg).convert_nnf)
+        when ForAll
+          Exists.new(arg.vars, Not.new(arg.arg).convert_nnf)
+        when Atom, AtomDecl
+          arg
+        else
+          raise "Cannot convert to NNF: #{arg.class}"
+        end
       end
     end
 
@@ -355,6 +400,10 @@ module Alchemizer
       def priority
         3
       end
+
+      def convert_nnf
+        Or.new(Not.new(lhs), rhs).convert_nnf
+      end
     end
 
     class IFF < BinaryOperator
@@ -364,6 +413,10 @@ module Alchemizer
 
       def priority
         2
+      end
+
+      def convert_nnf
+        And.new(Implies.new(lhs, rhs), Implies.new(rhs, lhs)).convert_nnf
       end
     end
 
@@ -375,6 +428,34 @@ module Alchemizer
       def priority
         1
       end
+
+      def rename(renaming, **kwargs)
+        new_vars = vars.map do |var|
+          new_var = var.rename(renaming, **kwargs)
+
+          if new_var.is_a?(Constant) || new_var.is_a?(ConstantDecl)
+            raise AlchemizerError, 'Cannot rename existentially qualified formula to ground'
+          end
+
+          new_var
+        end.uniq
+
+        self.class.new(new_vars, arg.rename(renaming))
+      end
+
+      def flatten_existential_quantifiers
+        if vars.any? { |v| v.is_a?(VariableDecl) }
+          raise 'Cannot flatten existential quantifiers of uncompiled expression'
+        end
+
+        return arg if vars.empty?
+
+        groundings = vars.map { |v| v.type.each_value.to_a }.products.map do |renaming|
+          arg.rename(vars.zip(renaming).to_h).flatten_existential_quantifiers
+        end
+
+        Or.new(*groundings)
+      end
     end
 
     class ForAll < QualifiedOperator
@@ -384,6 +465,41 @@ module Alchemizer
 
       def priority
         1
+      end
+
+      def rename(renaming, strip_universal_quantifiers: false, **kwargs)
+        new_vars = vars.map do |var|
+          var.rename(
+            renaming,
+            strip_universal_quantifiers: strip_universal_quantifiers,
+            **kwargs
+          )
+        end.uniq
+
+        grounded = new_vars.reject! { |new_var| new_var.is_a?(Constant) || new_var.is_a?(ConstantDecl) }
+
+        if grounded && !strip_universal_quantifiers
+          raise(
+            AlchemizerError,
+            'Cannot rename universally qualified formula to ground. Use strip_universal_quantifiers to force.'
+          )
+        end
+
+        new_arg = arg.rename(
+          renaming,
+          strip_universal_quantifiers: strip_universal_quantifiers,
+          **kwargs
+        )
+
+        if new_vars.empty?
+          new_arg
+        else
+          self.class.new(new_vars, new_arg)
+        end
+      end
+
+      def flatten_existential_quantifiers
+        self.class.new(vars, arg.flatten_existential_quantifiers)
       end
     end
 
@@ -518,7 +634,7 @@ module Alchemizer
       end
 
       def emit
-        args_s = args.map(&:emit).join(',')
+        args_s = args.map(&:emit).join(', ')
         "#{name}(#{args_s})"
       end
     end
@@ -538,7 +654,7 @@ module Alchemizer
       end
 
       def emit
-        args_s = args.map(&:emit).join(',')
+        args_s = args.map(&:emit).join(', ')
         "#{name}(#{args_s})"
       end
     end
@@ -627,8 +743,8 @@ module Alchemizer
         Atom.new(new_predicate, new_args)
       end
 
-      def rename(renaming)
-        self.class.new(predicate, args.map { |arg| arg.rename(renaming) })
+      def rename(renaming, **kwargs)
+        self.class.new(predicate, args.map { |arg| arg.rename(renaming, **kwargs) })
       end
 
       def all_vars
@@ -650,6 +766,10 @@ module Alchemizer
 
       def transform_atoms
         yield self
+      end
+
+      def flatten_existential_quantifiers
+        raise 'Cannot flatten existential quantifiers of uncompiled expression'
       end
     end
 
@@ -677,7 +797,7 @@ module Alchemizer
           else
             f
           end
-        end.join(',')
+        end.join(', ')
 
         "#{predicate_s}(#{args_s})"
       end
@@ -690,8 +810,8 @@ module Alchemizer
         end
       end
 
-      def rename(renaming)
-        self.class.new(predicate, args.map { |arg| arg.rename(renaming) })
+      def rename(renaming, **kwargs)
+        self.class.new(predicate, args.map { |arg| arg.rename(renaming, **kwargs) })
       end
 
       def all_vars
@@ -726,6 +846,10 @@ module Alchemizer
 
           blanket = new_blanket
         end
+      end
+
+      def flatten_existential_quantifiers
+        self
       end
 
       def sol2fol(sol_maps)
@@ -828,7 +952,7 @@ module Alchemizer
         Variable.new(name, type)
       end
 
-      def rename(renaming)
+      def rename(renaming, **_kwargs)
         new_v = renaming[self] || self
 
         unless new_v.is_a?(VariableDecl) || new_v.is_a?(ConstantDecl)
@@ -838,6 +962,10 @@ module Alchemizer
         raise AlchemizerError, "Mismatching types in renaming: #{type} => #{new_v.type}" unless new_v.type == type
 
         new_v
+      end
+
+      def gen_new
+        self.class.new("#{name}_")
       end
 
       def all_vars
@@ -859,7 +987,7 @@ module Alchemizer
         freeze
       end
 
-      def rename(renaming)
+      def rename(renaming, **_kwargs)
         new_v = renaming[self] || self
 
         unless new_v.is_a?(Variable) || new_v.is_a?(Constant)
@@ -897,7 +1025,7 @@ module Alchemizer
         type.resolve(name)
       end
 
-      def rename(_renaming)
+      def rename(_renaming, **_kwargs)
         self
       end
 
@@ -922,7 +1050,7 @@ module Alchemizer
         freeze
       end
 
-      def rename(_renaming)
+      def rename(_renaming, **_kwargs)
         self
       end
 
