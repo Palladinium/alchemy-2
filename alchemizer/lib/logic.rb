@@ -826,12 +826,14 @@ module Alchemizer
       def markov_blanket(mln)
         each_grounding.flat_map do |ground_atom|
           mln.rules.flat_map do |rule|
-            rule_blanket = rule.formula.each_ground_atom
+            rule.formula.flatten_quantifiers.flat_map do |ground_rule|
+              ground_rule_blanket = ground_rule.each_ground_atom
 
-            if rule_blanket.include?(ground_atom)
-              rule_blanket
-            else
-              []
+              if ground_rule_blanket.include?(ground_atom)
+                ground_rule_blanket
+              else
+                []
+              end
             end
           end - [ground_atom]
         end.uniq
@@ -841,7 +843,7 @@ module Alchemizer
         blanket = markov_blanket(mln).sort
 
         loop do
-          new_blanket = blanket.flat_map { |a| a.markov_blanket(mln) }.uniq.sort
+          new_blanket = (blanket + blanket.flat_map { |a| a.markov_blanket(mln) }).uniq.sort
           return blanket if new_blanket == blanket
 
           blanket = new_blanket

@@ -674,6 +674,20 @@ int main(int argc, char* argv[])
                        inference, inference->getState());
         }
       }
+
+      cout << "BEGIN CLAUSE TRUE COUNTS" << endl;
+      for (int i = 0; i < inference->getClauseTrueCnts()->size(); i++) {
+        int clause_groundings = (*inference->getState()->getMLN()->getClauses())[i]->getNumGroundings(domain);
+
+        cout << "clause " << i
+            << ": " << inference->getClauseTrueCnts()->item(i)
+            << " / " << clause_groundings * amcmcMaxSteps
+            << " (" << clause_groundings << " groundings) ";
+        
+        (*inference->getState()->getMLN()->getClauses())[i]->printWithWtAndStrVar(cout, domain);
+        cout << endl;
+      }
+      cout << "END CLAUSE TRUE COUNTS" << endl;
     }
   }
 

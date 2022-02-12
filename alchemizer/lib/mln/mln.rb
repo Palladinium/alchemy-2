@@ -24,12 +24,13 @@ module Alchemizer
     end
 
     class TrueCounts
-      attr_reader :actual, :max, :n_groundings
+      attr_reader :actual, :max, :n_groundings, :weight
 
-      def initialize(actual:, max:, n_groundings:)
+      def initialize(actual:, max:, n_groundings:, weight:)
         @actual = actual
         @max = max
         @n_groundings = n_groundings
+        @weight = weight
       end
     end
 
@@ -266,42 +267,48 @@ module Alchemizer
           fol_result = Result.parse_file(fol_result_path)
           result = fol_result.compile(fol_mln).fol2sol(fol_mln)
 
+          clause_count_re = %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\) (\d+(?:\.\d+)?) (.+)\z}
+
+          require 'pry'
+
           clause_true_counts =
             stdout_s
             .lines
+            .map(&:chomp)
             .drop_while { |l| !/BEGIN CLAUSE TRUE COUNTS/.match?(l) }
             .drop(1)
             .take_while { |l| !/END CLAUSE TRUE COUNTS/.match?(l) }
-            .map { |l| %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\)}.match(l).captures }
-            .group_by { |m| Integer(m[0]) }
+            .map { |l| clause_count_re.match(l) }
+            .group_by { |m| m[6]&.strip }
             .transform_values do |g|
               raise 'Multiple true counts for clause' unless g.length == 1
 
               m = g[0]
-              TrueCounts.new(actual: Integer(m[1]), max: Integer(m[2]), n_groundings: Integer(m[3]))
+              TrueCounts.new(
+                actual: Integer(m[2]),
+                max: Integer(m[3]),
+                n_groundings: Integer(m[4]),
+                weight: Float(m[5])
+              )
             end
 
-          clause_count = 0
+          # formula_re = /\Aformula (\d+): (.+)\z/
 
           true_counts =
             stdout_s
             .lines
-            .drop_while { |l| !/BEGIN CNF CONVERSION RESULT/.match?(l) }
+            .map(&:chomp)
+            .drop_while { |l| !/converting to CNF:/.match?(l) }
             .drop(1)
-            .take_while { |l| !/END CNF CONVERSION RESULT/.match?(l) }
-            .map { |l| /\Aformula (\d+) idx (\d+):/.match(l).captures }
-            .group_by { |m| Integer(m[0]) }
-            .transform_values do |g|
-              counts = g.map do |m|
-                clause_true_counts.fetch(clause_count + Integer(m[1]))
+            .take_while { |l| !/BEGIN CNF CONVERSION RESULT/.match?(l) }
+            .chunk_while { |l, _| !/\ACNF conversion took/.match?(l) }
+            .map do |c|
+              # formula_re.match(l)&.captures&.dig(1)
+              c[1..-2].map do |clause_line|
+                m = /\Aclause (\d+)( \(merged\))?: (.+)\z/.match(clause_line)
+                clause_true_counts.fetch(m[3].strip)
               end
-
-              clause_count += counts.length
-
-              counts
             end
-
-          raise 'Mismatching clause counts' if clause_true_counts.key?(clause_count)
 
           raise 'Mismatching rule counts' unless true_counts.length == rules.length
 

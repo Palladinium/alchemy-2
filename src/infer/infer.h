@@ -1210,6 +1210,7 @@ int buildInference(Inference*& inference, Domain*& domain,
   }
 
   unlink(wkMLNFile.c_str());
+  cout << "BEGIN CNF CONVERSION RESULT" << endl;
   const FormulaAndClausesArray* fca = mln->getFormulaAndClausesArray();
   for (int i = 0; i < fca->size(); i++)
   {
@@ -1218,11 +1219,12 @@ int buildInference(Inference*& inference, Domain*& domain,
     {
       int idx = (*indexClauses)[j]->index;
       Clause* c = (*indexClauses)[j]->clause;
-      cout << "idx " << idx << ": ";
+      cout << "formula " << i << " idx " << idx << ": ";
       c->printWithWtAndStrVar(cout, domain);
       cout << endl;
     }
   }
+  cout << "END CNF CONVERSION RESULT" << endl;
     //////////////////////////// run inference /////////////////////////////////
 
     ///////////////////////// read & create query predicates ///////////////////
@@ -1305,7 +1307,7 @@ int buildInference(Inference*& inference, Domain*& domain,
 	  queries[i]->print(cout,domain);
 	  cout<<endl;
   }
-  bool trackClauseTrueCnts = false;
+  bool trackClauseTrueCnts = true;
   VariableState* state = NULL;
   HVariableState* hstate = NULL;
   FactorGraph* factorGraph = NULL;
@@ -1324,12 +1326,12 @@ int buildInference(Inference*& inference, Domain*& domain,
   {
       // Create inference algorithm and state based on queries and mln / domain
     bool markHardGndClauses = true;
-    bool trackParentClauseWts = false;
+    bool trackParentClauseWts = true;
     if (aHybrid)
     {
         // Create inference algorithm and state based on queries and mln / domain
       bool markHardGndClauses = true;
-      bool trackParentClauseWts = false;
+      bool trackParentClauseWts = true;
 	  hstate = new HVariableState(&queries, NULL, NULL,
 		                          &allPredGndingsAreQueries,
 		                          markHardGndClauses,

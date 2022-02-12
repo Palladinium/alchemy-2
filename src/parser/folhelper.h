@@ -2692,8 +2692,8 @@ void zzappendFormulaClausesToMLN(const ListObj* const & formula,
       zzcreateClauses(cnf, clauses, flippedClause, isIndivisible);
 
         // Output message of cnf size only if more than one
-      if (clauses.size() > 1)
-        cout << "\tCNF has  " << clauses.size() << " clauses" << endl;
+      //if (clauses.size() > 1)
+      //  cout << "\tCNF has  " << clauses.size() << " clauses" << endl;
 
       delete cnf; delete vars;
 
@@ -2773,21 +2773,25 @@ void zzappendFormulaClausesToMLN(const ListObj* const & formula,
                                  clauseUtil);
         }
 
+        cout << "clause " << i;
+
         if (!ok)
         {
-          cout << "\tsame clause (derived from another formula) has been added "
-               << "to MLN:\n\t";
+          cout << " (merged)";
+        }
+
+        cout << ": ";
+
+        if (isHybrid)
+        {
+          cout << formStr << endl;
+        }
+        else
+        {
           const Clause* cl;
-          if (isHybrid)
-          {
-            cout << formStr << endl;
-          }
-          else
-          {
-            cl = mln->getClause(prevIdx);
-            cl->printWithoutWt(cout,domain); cout << endl;
-          }
-          //cout << " derived from current formula:\n\t" << formStr << endl;
+          cl = mln->getClause(prevIdx);
+          cl->printWithoutWt(cout,domain); 
+          cout << endl;
         }
 
         if (setHardWtLater) hardClauseIdxs.append(prevIdx);
