@@ -24,12 +24,13 @@ module Alchemizer
 
         if block
           vars_.map { |v| v.type.values }.products do |renaming|
-            yield rename(vars_.zip(renaming).to_h, **kwargs)
+            renamed = rename(vars_.zip(renaming).to_h, **kwargs).fold_constants
+            yield renamed if renamed.valid_assignment?
           end
         else
           vars_.map { |v| v.type.each_value.to_a }.products.map do |renaming|
-            rename(vars_.zip(renaming).to_h, **kwargs)
-          end
+            rename(vars_.zip(renaming).to_h, **kwargs).fold_constants
+          end.select(&:valid_assignment?)
         end
       end
 
@@ -143,6 +144,14 @@ module Alchemizer
       def standardize_variables
         self.class.new(arg.standardize_variables)
       end
+
+      def valid_assignment?
+        arg.valid_assignment?
+      end
+
+      def fold_constants
+        self.class.new(arg.fold_constants)
+      end
     end
 
     module InfixOperator
@@ -210,6 +219,10 @@ module Alchemizer
         end
 
         self.class.new(*new_args)
+      end
+
+      def valid_assignment?
+        args.all?(&:valid_assignment?)
       end
     end
 
@@ -298,7 +311,11 @@ module Alchemizer
             end
           end
 
-          types = matching_args.map(&:type).uniq
+          types = matching_args.map(&:type)
+          types = types.map do |type|
+            types.find { |ty| type.subsumes?(ty) } || type
+          end.uniq
+
           type = case types.length
                  when 0
                    raise AlchemizerError, "No matching use found for #{var.name} in #{to_formula}"
@@ -316,6 +333,14 @@ module Alchemizer
 
       def convert_nnf
         self.class.new(vars, arg.convert_nnf)
+      end
+
+      def fold_constants
+        new_arg = arg.fold_constants
+
+        return new_arg if new_arg.is_a?(BoolConstant)
+
+        self.class.new(vars, new_arg)
       end
 
       def standardize_variables
@@ -370,6 +395,16 @@ module Alchemizer
           raise "Cannot convert to NNF: #{arg.class}"
         end
       end
+
+      def fold_constants
+        new_arg = arg.fold_constants
+
+        if new_arg.is_a?(BoolConstant)
+          BoolConstant.new(!new_arg.value)
+        else
+          self.class.new(new_arg)
+        end
+      end
     end
 
     class And < NAryOperator
@@ -380,6 +415,17 @@ module Alchemizer
       def priority
         5
       end
+
+      def fold_constants
+        new_args = args.map(&:fold_constants)
+
+        new_args.each do |arg|
+          return self.class.new(*new_args) unless arg.is_a?(BoolConstant)
+          return BoolConstant.new(false) unless arg.value
+        end
+
+        BoolConstant.new(true)
+      end
     end
 
     class Or < NAryOperator
@@ -389,6 +435,17 @@ module Alchemizer
 
       def priority
         4
+      end
+
+      def fold_constants
+        new_args = args.map(&:fold_constants)
+
+        new_args.each do |arg|
+          return self.class.new(*new_args) unless arg.is_a?(BoolConstant)
+          return BoolConstant.new(true) if arg.value
+        end
+
+        BoolConstant.new(false)
       end
     end
 
@@ -404,6 +461,29 @@ module Alchemizer
       def convert_nnf
         Or.new(Not.new(lhs), rhs).convert_nnf
       end
+
+      def fold_constants
+        new_lhs = lhs.fold_constants
+        new_rhs = rhs.fold_constants
+
+        if new_lhs.is_a?(BoolConstant)
+          return (if new_lhs.value
+                    new_rhs
+                  else
+                    BoolConstant.new(true)
+                  end)
+        end
+
+        if new_rhs.is_a?(BoolConstant)
+          return (if new_rhs.value
+                    BoolConstant.new(true)
+                  else
+                    new_lhs
+                  end)
+        end
+
+        self.class.new(new_lhs, new_rhs)
+      end
     end
 
     class IFF < BinaryOperator
@@ -417,6 +497,17 @@ module Alchemizer
 
       def convert_nnf
         And.new(Implies.new(lhs, rhs), Implies.new(rhs, lhs)).convert_nnf
+      end
+
+      def fold_constants
+        new_lhs = lhs.fold_constants
+        new_rhs = rhs.fold_constants
+
+        if new_lhs.is_a?(BoolConstant) && new_rhs.is_a?(BoolConstant)
+          return BoolConstant.new(new_lhs.value == new_rhs.value)
+        end
+
+        self.class.new(new_lhs, new_rhs)
       end
     end
 
@@ -594,6 +685,10 @@ module Alchemizer
         end
       end
 
+      def subsumes?(_other)
+        false
+      end
+
       private
 
       def initialize(name, values, locked:)
@@ -726,7 +821,11 @@ module Alchemizer
       end
 
       def compile(predicates:, **_other_keys)
-        new_predicate = predicates[predicate] || raise(AlchemizerError, "Undefined predicate #{predicate}")
+        new_predicate = if predicate.is_a?(BuiltinPredicate)
+                          predicate
+                        else
+                          predicates[predicate] || raise(AlchemizerError, "Undefined predicate #{predicate}")
+                        end
 
         expected = new_predicate.args.length
         actual = args.length
@@ -937,6 +1036,20 @@ module Alchemizer
           end
         )
       end
+
+      def valid_assignment?
+        args.all?(&:valid_assignment?)
+      end
+
+      def fold_constants
+        new_args = args.map(&:fold_constants)
+
+        if new_args.all? { |arg| arg.is_a?(Constant) } && predicate.is_a?(BuiltinPredicate)
+          predicate.apply(*new_args)
+        else
+          self.class.new(predicate, new_args)
+        end
+      end
     end
 
     class VariableDecl
@@ -996,7 +1109,9 @@ module Alchemizer
           raise TypeError, "Invalid renaming: #{self.class} => #{new_v.class}"
         end
 
-        raise AlchemizerError, "Mismatching types in renaming: #{type} => #{new_v.type}" unless new_v.type == type
+        unless type == new_v.type || type.subsumes?(new_v.type)
+          raise AlchemizerError, "Mismatching types in renaming: #{type} => #{new_v.type}"
+        end
 
         new_v
       end
@@ -1007,6 +1122,14 @@ module Alchemizer
 
       def to_formula(**_other_keys)
         name
+      end
+
+      def valid_assignment?
+        true
+      end
+
+      def fold_constants
+        self
       end
     end
 
@@ -1062,6 +1185,203 @@ module Alchemizer
 
       def to_formula(**_other_keys)
         name
+      end
+
+      def valid_assignment?
+        type.values.include?(name)
+      end
+
+      def fold_constants
+        self
+      end
+    end
+
+    class BoolConstant
+      include Formula
+      attr_reader :value
+
+      def initialize(value)
+        unless value.is_a?(TrueClass) || value.is_a?(FalseClass)
+          raise AlchemizerError, "Invalid bool constant: #{value}"
+        end
+
+        @value = value.freeze
+        freeze
+      end
+
+      def each_atom(&block)
+        if block
+          yield self
+        else
+          [self]
+        end
+      end
+
+      def flatten_existential_quantifiers
+        self
+      end
+
+      def rename(_renaming, **_kwargs)
+        self
+      end
+
+      def all_vars
+        []
+      end
+
+      def valid_assignment?
+        true
+      end
+
+      def to_formula(**_other_keys)
+        @value.to_s
+      end
+
+      def fold_constants
+        self
+      end
+    end
+
+    class IntType
+      def subsumes?(other)
+        other != self && other.values.is_a?(Range)
+      end
+
+      def values
+        -1000..1000
+      end
+    end
+
+    INT_TYPE = IntType.new
+
+    class Function
+      include Formula
+      attr_reader :args
+
+      def initialize(*args)
+        @args = args.freeze
+
+        freeze
+      end
+
+      def compile(**other_keys)
+        self.class.new(*args.zip(self.class.signature).map { |arg, type| arg.compile(type: type, **other_keys) })
+      end
+
+      def rename(renaming, **kwargs)
+        self.class.new(*args.map { |arg| arg.rename(renaming, **kwargs) })
+      end
+
+      def all_vars
+        args.flat_map(&:all_vars)
+      end
+
+      def to_formula(**_other_keys)
+        args_s = args.map(&:to_formula).join(',')
+        "#{name}(#{args_s})"
+      end
+
+      def fold_constants
+        new_args = args.map(&:fold_constants)
+
+        if new_args.all? { |arg| arg.is_a?(Constant) }
+          self.class.apply(*new_args)
+        else
+          self.class.new(*new_args)
+        end
+      end
+
+      def valid_assignment?
+        return true unless args.all? { |arg| arg.is_a?(Constant) }
+
+        folded = fold_constants
+
+        raise AlchemizerError, 'Constants did not fold' unless args.all? { |arg| arg.is_a?(Constant) }
+
+        folded.valid_assignment?
+      end
+    end
+
+    class IntFunction < Function
+      def initialize(*args)
+        super
+
+        unless args.length == self.class.arity &&
+               args.all? { |arg| arg.is_a?(ConstantDecl) || arg.is_a?(VariableDecl) || arg.type.values.is_a?(Range) }
+          raise AlchemizerError, "Invalid function argument: '#{args}' for function '#{name}'"
+        end
+      end
+
+      def self.signature
+        [INT_TYPE] * arity
+      end
+    end
+
+    class Succ < IntFunction
+      def self.arity
+        1
+      end
+
+      def name
+        'succ'
+      end
+
+      def self.apply(arg)
+        Constant.new(arg.name + 1, arg.type)
+      end
+    end
+
+    class BuiltinPredicate
+      include Formula
+
+      def to_formula(**_other_keys)
+        name
+      end
+    end
+
+    class IntComparePredicate < BuiltinPredicate
+      def args
+        [ArgDecl.new(INT_TYPE, false)] * 2
+      end
+    end
+
+    class GreaterThan < IntComparePredicate
+      def name
+        'greaterThan'
+      end
+
+      def apply(lhs, rhs)
+        BoolConstant.new(lhs.name > rhs.name)
+      end
+    end
+
+    class LessThan < IntComparePredicate
+      def name
+        'lessThan'
+      end
+
+      def apply(lhs, rhs)
+        BoolConstant.new(lhs.name < rhs.name)
+      end
+    end
+
+    class GreaterThanOrEqual < IntComparePredicate
+      def name
+        'greaterThanEq'
+      end
+
+      def apply(lhs, rhs)
+        BoolConstant.new(lhs.name >= rhs.name)
+      end
+    end
+
+    class LessThanOrEqual < IntComparePredicate
+      def name
+        'lessThanEq'
+      end
+
+      def apply(lhs, rhs)
+        BoolConstant.new(lhs.name <= rhs.name)
       end
     end
   end

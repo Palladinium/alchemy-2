@@ -78,7 +78,47 @@ module Alchemizer
             Alchemizer::Logic::Not.new(not_sentence.value)
           end
         }
+        / int_bool_expr
         / atom
+      end
+
+      rule int_bool_expr
+        gt_expr
+        / lt_expr
+        / ge_expr
+        / le_expr
+      end
+
+      rule gt_expr
+        (lhs:arg space* '>' space* rhs:arg) {
+          def value
+            Alchemizer::Logic::AtomDecl.new(Alchemizer::Logic::GreaterThan.new, [lhs.value, rhs.value])
+          end
+        }
+      end
+
+      rule lt_expr
+        (lhs:arg space* '<' space* rhs:arg) {
+          def value
+            Alchemizer::Logic::AtomDecl.new(Alchemizer::Logic::LessThan.new, [lhs.value, rhs.value])
+          end
+        }
+      end
+
+      rule ge_expr
+        (lhs:arg space* '>=' space* rhs:arg) {
+          def value
+            Alchemizer::Logic::AtomDecl.new(Alchemizer::Logic::GreaterThanOrEqual.new, [lhs.value, rhs.value])
+          end
+        }
+      end
+
+      rule le_expr
+        (lhs:arg space* '<=' space* rhs:arg) {
+          def value
+            Alchemizer::Logic::AtomDecl.new(Alchemizer::Logic::LessThanOrEqual.new, [lhs.value, rhs.value])
+          end
+        }
       end
 
       rule atom
@@ -125,6 +165,7 @@ module Alchemizer
 
       rule arg
         sol_atom
+        / function_call
         / variable
         / constant
       end
@@ -165,6 +206,14 @@ module Alchemizer
         / (name:capitalized_name) {
           def value
             Alchemizer::Logic::ConstantDecl.new(name.text_value)
+          end
+        }
+      end
+
+      rule function_call
+        ('succ(' val:arg ')') {
+          def value
+            Alchemizer::Logic::Succ.new(val.value)
           end
         }
       end

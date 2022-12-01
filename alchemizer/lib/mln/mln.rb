@@ -24,13 +24,14 @@ module Alchemizer
     end
 
     class TrueCounts
-      attr_reader :actual, :max, :n_groundings, :weight
+      attr_reader :actual, :max, :n_groundings, :weight, :formula
 
-      def initialize(actual:, max:, n_groundings:, weight:)
+      def initialize(actual:, max:, n_groundings:, weight:, formula:)
         @actual = actual
         @max = max
         @n_groundings = n_groundings
         @weight = weight
+        @formula = formula
       end
     end
 
@@ -220,7 +221,7 @@ module Alchemizer
         raise AlchemizerError, 'Mismatching query MLN' unless query.mln == self
 
         Alchemizer.chdir_tmp(log_dir) do |dir|
-          fol_mln = sol2fol
+          fol_mln = sol2fol.fold_constants.hack_constants_for_inference
           fol_mln_path = File.join(dir, 'input.mln')
           File.write(fol_mln_path, fol_mln.emit)
 
@@ -259,9 +260,9 @@ module Alchemizer
             File.write(stdout_path, stdout_s)
             File.write(stderr_path, stderr_s)
 
-            raise AlchemyError, "Alchemy command failed with status #{status.exitstatus}" unless status.success?
+            raise AlchemyError, "Alchemy command failed: #{status}" unless status.success?
 
-            raise AlchemyError, 'Alchemy has encountered errors' if /ERROR/.match?(stdout_s)
+            raise AlchemyError, "Alchemy has encountered errors. See #{stdout_path} and #{stderr_path} for details" if /ERROR/.match?(stdout_s)
           end
 
           fol_result = Result.parse_file(fol_result_path)
@@ -288,7 +289,8 @@ module Alchemizer
                 actual: Integer(m[2]),
                 max: Integer(m[3]),
                 n_groundings: Integer(m[4]),
-                weight: Float(m[5])
+                weight: Float(m[5]),
+                formula: Logic.parse_sentence(m[6].strip).compile(predicates: predicates)
               )
             end
 
@@ -319,6 +321,42 @@ module Alchemizer
             true_counts: true_counts
           )
         end
+      end
+
+      def fold_constants
+        MLN.new(
+          types: types,
+          predicates: predicates,
+          rules: rules.map(&:fold_constants)
+        )
+      end
+
+      # HACK: Alchemy syntax doesn't have a way to represent constant true or false values,
+      # so we construct an arbitrary trivially true or false statement instead
+      def hack_constants_for_inference
+        new_rules = rules.map do |rule|
+          if rule.formula.is_a?(Logic::BoolConstant)
+            op = if rule.formula.value
+                   Logic::Or
+                 else
+                   Logic::And
+                 end
+
+            predicate = predicates.each_value.first
+            args = predicate.args.map { |arg| Logic::Constant.new(arg.type.values.first, arg.type) }
+            atom = Logic::Atom.new(predicate, args)
+
+            MLNRule.new(op.new(atom, Logic::Not.new(atom)), rule.weight)
+          else
+            rule
+          end
+        end
+
+        MLN.new(
+          types: types,
+          predicates: predicates,
+          rules: new_rules
+        )
       end
 
       def merge(other)

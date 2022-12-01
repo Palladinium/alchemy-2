@@ -10,11 +10,11 @@ module Alchemizer
       extend Parsable
 
       def self.weighted(formula, weight)
-        new(formula, weight)
+        MLNRule.new(formula, weight)
       end
 
       def self.strong(formula)
-        new(formula, Float::INFINITY)
+        MLNRule.new(formula, Float::INFINITY)
       end
 
       def strong?
@@ -44,6 +44,10 @@ module Alchemizer
       def conver_cnf
         clauses = formula.convert_cnf
         clauses.map { |f| self.class.new(f, Float(weight) / Float(clauses.length)) }
+      end
+
+      def fold_constants
+        MLNRule.new(formula.fold_constants, weight)
       end
 
       def eql?(other)
