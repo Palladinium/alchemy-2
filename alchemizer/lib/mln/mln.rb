@@ -268,7 +268,7 @@ module Alchemizer
           fol_result = Result.parse_file(fol_result_path)
           result = fol_result.compile(fol_mln).fol2sol(fol_mln)
 
-          clause_count_re = %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\) (\d+(?:\.\d+)?) (.+)\z}
+          clause_count_re = %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\) (-?\d+(?:\.\d+)?) (.+)\z}
 
           require 'pry'
 
@@ -343,7 +343,19 @@ module Alchemizer
                  end
 
             predicate = predicates.each_value.first
-            args = predicate.args.map { |arg| Logic::Constant.new(arg.type.values.first, arg.type) }
+
+            args = predicate.args.map do |arg|
+              values = arg.type.values
+              value = case values
+                      when Hash
+                        values.each_value.first
+                      when Range
+                        values.first
+                      end
+
+              Logic::Constant.new(value, arg.type)
+            end
+
             atom = Logic::Atom.new(predicate, args)
 
             MLNRule.new(op.new(atom, Logic::Not.new(atom)), rule.weight)

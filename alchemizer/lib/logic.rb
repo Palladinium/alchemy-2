@@ -417,14 +417,15 @@ module Alchemizer
       end
 
       def fold_constants
-        new_args = args.map(&:fold_constants)
+        new_args = args.map(&:fold_constants).reject { |arg| arg.is_a?(BoolConstant) && arg.value }
 
-        new_args.each do |arg|
-          return self.class.new(*new_args) unless arg.is_a?(BoolConstant)
-          return BoolConstant.new(false) unless arg.value
+        if new_args.any? { |arg| arg.is_a?(BoolConstant) && !arg.value }
+          BoolConstant.new(false)
+        elsif new_args.empty?
+          BoolConstant.new(true)
+        else
+          self.class.new(*new_args)
         end
-
-        BoolConstant.new(true)
       end
     end
 
@@ -438,14 +439,15 @@ module Alchemizer
       end
 
       def fold_constants
-        new_args = args.map(&:fold_constants)
+        new_args = args.map(&:fold_constants).reject { |arg| arg.is_a?(BoolConstant) && !arg.value }
 
-        new_args.each do |arg|
-          return self.class.new(*new_args) unless arg.is_a?(BoolConstant)
-          return BoolConstant.new(true) if arg.value
+        if new_args.any? { |arg| arg.is_a?(BoolConstant) && arg.value }
+          BoolConstant.new(true)
+        elsif new_args.empty?
+          BoolConstant.new(false)
+        else
+          self.class.new(*new_args)
         end
-
-        BoolConstant.new(false)
       end
     end
 
@@ -504,10 +506,22 @@ module Alchemizer
         new_rhs = rhs.fold_constants
 
         if new_lhs.is_a?(BoolConstant) && new_rhs.is_a?(BoolConstant)
-          return BoolConstant.new(new_lhs.value == new_rhs.value)
+          BoolConstant.new(new_lhs.value == new_rhs.value)
+        elsif new_lhs.is_a?(BoolConstant)
+          if new_lhs.value
+            new_rhs
+          else
+            Not.new(new_rhs)
+          end
+        elsif new_rhs.is_a?(BoolConstant)
+          if new_rhs.value
+            new_lhs
+          else
+            Not.new(new_lhs)
+          end
+        else
+          self.class.new(new_lhs, new_rhs)
         end
-
-        self.class.new(new_lhs, new_rhs)
       end
     end
 
@@ -1168,7 +1182,7 @@ module Alchemizer
       attr_reader :name, :type
 
       def initialize(name, type)
-        raise ArgumentError, "type is not a Type: #{type}" unless type.is_a?(Type)
+        raise ArgumentError, "type is not a Type: #{type}" unless type.is_a?(Type) || type.is_a?(BuiltinType)
 
         @name = name.freeze
         @type = type # Do not freeze the type as we are being added to it
@@ -1242,13 +1256,24 @@ module Alchemizer
       end
     end
 
-    class IntType
+    class BuiltinType
+    end
+
+    class IntType < BuiltinType
       def subsumes?(other)
         other != self && other.values.is_a?(Range)
       end
 
       def values
         -1000..1000
+      end
+
+      def resolve(value_name)
+        unless values.include?(value_name.to_i)
+          raise AlchemizerError, "Constant #{value_name} is out of range for built-in integer type #{values}"
+        end
+
+        Constant.new(value_name.to_i, self)
       end
     end
 
@@ -1308,7 +1333,7 @@ module Alchemizer
 
         unless args.length == self.class.arity &&
                args.all? { |arg| arg.is_a?(ConstantDecl) || arg.is_a?(VariableDecl) || arg.type.values.is_a?(Range) }
-          raise AlchemizerError, "Invalid function argument: '#{args}' for function '#{name}'"
+          raise AlchemizerError, "Invalid function arguments: '#{args}' for function '#{name}'"
         end
       end
 
