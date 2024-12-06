@@ -29,13 +29,17 @@ module Alchemizer
           end
         else
           vars_.map { |v| v.type.each_value.to_a }.products.map do |renaming|
+            binding.pry if vars_.any? { |v| v.name == "t" && v.type == INT_TYPE }
             rename(vars_.zip(renaming).to_h, **kwargs).fold_constants
           end.select(&:valid_assignment?)
         end
       end
 
       def each_ground_atom(&block)
-        atoms_ = each_grounding.flat_map(&:each_atom).uniq
+        atoms_ = flatten_existential_quantifiers
+          .each_grounding(strip_universal_quantifiers: true)
+          .flat_map(&:each_atom)
+          .uniq
 
         if block
           atoms_.each(&block)
@@ -275,12 +279,8 @@ module Alchemizer
         freeze
       end
 
-      def each_ground_atom
-        arg.each_ground_atom
-      end
-
       def all_vars
-        vars | arg.all_vars
+        vars | arg.all_vars.reject { |arg_var| vars.any? { |var| arg_var.name == var.name } }
       end
 
       def transform_atoms(&block)
@@ -302,7 +302,7 @@ module Alchemizer
         compiled_arg = arg.compile(predicates: predicates)
 
         compiled_vars = vars.map do |var|
-          matching_args = compiled_arg.each_atom.flat_map(&:args).select do |arg|
+          matching_uses = compiled_arg.each_atom.flat_map(&:args).select do |arg|
             case arg
             when Variable
               arg.name == var.name
@@ -311,7 +311,8 @@ module Alchemizer
             end
           end
 
-          types = matching_args.map(&:type)
+          types = matching_uses.map(&:type).uniq
+          # Coalesce all usages of the variable to the tightest type
           types = types.map do |type|
             types.find { |ty| type.subsumes?(ty) } || type
           end.uniq
@@ -1265,7 +1266,11 @@ module Alchemizer
       end
 
       def values
-        -1000..1000
+        -100..100
+      end
+
+      def each_value
+        values.map { |v| Constant.new(v, self) }
       end
 
       def resolve(value_name)

@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.summary     = 'Wrapper around alchemy 2'
   spec.description = 'Wrapper around alchemy 2'
   spec.authors     = ['Patrick Chieppe']
-  spec.email       = 'patrick.chieppe@any.edu.au'
+  spec.email       = 'patrick.chieppe@anu.edu.au'
 
   # Prevent pushing this gem to RubyGems.org. To allow pushes either set the 'allowed_push_host'
   # to allow pushing to a single host or delete this section to allow pushing to any host.
