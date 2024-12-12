@@ -675,6 +675,9 @@ int main(int argc, char* argv[])
         }
       }
 
+      // NOTE (P. Chieppe):
+      // This is rather unclean, ideally the true counts would be saved to a separate file provided by a command-line argument
+      // rather than simply to standard output. I didn't get around to cleaning this up, sorry.
       cout << "BEGIN CLAUSE TRUE COUNTS" << endl;
       for (int i = 0; i < inference->getClauseTrueCnts()->size(); i++) {
         int clause_groundings = (*inference->getState()->getMLN()->getClauses())[i]->getNumGroundings(domain);

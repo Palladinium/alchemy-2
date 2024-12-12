@@ -1210,6 +1210,9 @@ int buildInference(Inference*& inference, Domain*& domain,
   }
 
   unlink(wkMLNFile.c_str());
+
+  // This is not actually necessary to reproduce the results.
+  // TODO: remove
   cout << "BEGIN CNF CONVERSION RESULT" << endl;
   const FormulaAndClausesArray* fca = mln->getFormulaAndClausesArray();
   for (int i = 0; i < fca->size(); i++)
