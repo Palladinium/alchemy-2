@@ -22,4 +22,5 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'polyglot', '~> 0.3.5'
   spec.add_runtime_dependency 'thor', '~> 1.2.1'
   spec.add_runtime_dependency 'treetop', '~> 1.6.11'
+  spec.add_runtime_dependency 'open3', '~> 0.2.1'
 end

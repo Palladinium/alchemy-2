@@ -29,7 +29,6 @@ module Alchemizer
           end
         else
           vars_.map { |v| v.type.each_value.to_a }.products.map do |renaming|
-            binding.pry if vars_.any? { |v| v.name == "t" && v.type == INT_TYPE }
             rename(vars_.zip(renaming).to_h, **kwargs).fold_constants
           end.select(&:valid_assignment?)
         end

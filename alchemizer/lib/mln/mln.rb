@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'open3'
+
 require_relative '../logic'
 require_relative '../util'
 require_relative '../errors'
@@ -60,7 +62,6 @@ module Alchemizer
         MLNFile.parse(input).compile
       end
 
-      # TODO: What the heck am I doing here?
       def sol2fol
         # Predicates where any argument is another predicate
         sol_type = types[Logic::SOL_TYPE]
@@ -269,8 +270,6 @@ module Alchemizer
           result = fol_result.compile(fol_mln).fol2sol(fol_mln)
 
           clause_count_re = %r{\Aclause (\d+): (\d+) / (\d+) \((\d+) groundings\) (-?\d+(?:\.\d+)?) (.+)\z}
-
-          require 'pry'
 
           clause_true_counts =
             stdout_s
